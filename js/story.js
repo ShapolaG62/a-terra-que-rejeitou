@@ -148,8 +148,15 @@ async function fireMenu() {
       <button class="btn" data-act="inv">Inventário <small>${(G.save.items || []).length} itens</small></button>
       <button class="btn" data-act="up">Contar histórias <small>◆ ${G.save.mem}</small></button>
       <button class="btn" data-act="j">Diário</button>
+      <button class="btn" data-act="look">Visual do espírito <small>${VARIANTE_NOMES[varianteAtual()]}</small></button>
       ${G.save.cold ? '<button class="btn" data-act="go">Viajar <small>fogueiras já acesas</small></button>' : ''}
       <button class="btn" data-act="back">Seguir viagem</button></div>`);
+    if (a === 'look') {
+      const n = variantesLiberadas(), quando = ['', '', 'libera no Pantanal', 'libera na Mata Atlântica'];
+      const b = await menu(`<h2>Visual do espírito</h2><p>O jeito com que o espírito veste as formas dos povos.</p><div class="btns">${VARIANTE_NOMES.map((nm, i) => `<button class="btn" data-act="v${i}" ${i < n ? '' : 'disabled'}>${nm} <small>${i < n ? (i === varianteAtual() ? 'em uso' : 'liberado') : quando[i]}</small></button>`).join('')}<button class="btn" data-act="back">Voltar</button></div>`);
+      if (b && b[0] === 'v') { G.save.look = +b.slice(1); writeSave(); }
+      continue;
+    }
     if (a === 'go') { const to = await travelMenu(); if (to) { await travelTo(to); return; } continue; }
     if (a === 'up') {
       for (;;) {
@@ -197,11 +204,22 @@ const CARDS = [
   ['Ato V', 'Mata Atlântica', 'O Corpo-seco', 'A primeira a cair. Foi aqui que tudo começou.'],
   ['Final', 'O coração da mata', '', 'Abrir mão.'],
 ];
+// passagem entre regiões: guarda a imagem da cena atual; ela desliza para fora enquanto a nova região já aparece
+const transC = document.createElement('canvas'); transC.width = W; transC.height = H;
+function snapshotScene() { transC.getContext('2d').drawImage(cv, 0, 0); }
+function startSlide() { G.trans = { t0: G.rt, dur: 1.1 }; }
+function drawTransition() {
+  const k = (G.rt - G.trans.t0) / G.trans.dur;
+  if (k >= 1) { G.trans = null; return; }
+  const e = k * k * (3 - 2 * k), ox = -Math.round(e * W);
+  ctx.globalAlpha = 1 - e * 0.35; ctx.drawImage(transC, ox, 0); ctx.globalAlpha = 1;
+  ctx.globalAlpha = 0.25 * (1 - e); rect(ctx, ox + W - 1, 0, 2, H, '#f4ecd8'); ctx.globalAlpha = 1; // brilho na emenda
+}
 async function enterAct(n, o = {}) {
   G.save.act = n; writeSave();
-  G.state = 'card';
-  const lvl = homeLevel(n);
-  if (!o.skipCard) await showCard(...(lvl === 'gruta' ? GRUTA_CARD : CARDS[n]));
+  const lvl = homeLevel(n), card = lvl === 'gruta' ? GRUTA_CARD : CARDS[n];
+  if (!o.smooth) G.state = 'card';
+  if (!o.skipCard && !o.smooth) await showCard(...card);
   loadLevel(lvl);
   G.flags = { final: n === 6 };
   let x = G.lvl.start;
@@ -215,29 +233,31 @@ async function enterAct(n, o = {}) {
   if (walkIn) { G.P.x = Math.max(2, x - 46); G.P.f = 1; G.auto = 1; G.lock++; }
   G.cam.x = clamp(G.P.x - W / 2, 0, G.lvl.w - W);
   G.state = 'play'; $('#hud').hidden = false; updateHudForm(); hud.cache = {};
+  if (o.smooth) { startSlide(); showToast(card[0] + ' · ' + card[1], card[3] || card[2], 3.2); }
   if (walkIn) { const t0 = G.rt; fade(false); await waitUntil(() => G.P.x >= x || G.rt - t0 > 1.6); G.auto = 0; G.lock--; } else await fade(false);
   if (G.lvl.onStart) scene(G.lvl.onStart);
 }
-// sai caminhando para a direita (as paredes da arena caem) enquanto a tela escurece
+// sai caminhando para a direita (as paredes da arena caem); a cena fica guardada para deslizar na troca de região
 async function walkOut() {
   if (G.P && G.state === 'play') {
     G.lvl.solids = G.lvl.solids.filter(s => !s.arenaWall); closeDialog();
-    G.P.state = 'normal'; G.P.f = 1; G.auto = 1; await wait(0.5); await fade(true); G.auto = 0;
-  } else await fade(true);
+    G.P.state = 'normal'; G.P.f = 1; G.auto = 1; await wait(0.7); G.auto = 0;
+  }
+  snapshotScene();
 }
 // fase atual do ato (o Ato II continua na Gruta dos Antigos depois do Capelobo)
 function homeLevel(n = G.save.act) { return n === 2 && G.save.sub === 'gruta' ? 'gruta' : ACTS[n]; }
 async function enterGruta() {
   await walkOut();
   G.save.sub = 'gruta'; G.save.fire = null; G.save.drop = null; writeSave();
-  $('#hud').hidden = true; hud.boss.hidden = true;
-  enterAct(G.save.act, { walkIn: true });
+  hud.boss.hidden = true;
+  enterAct(G.save.act, { walkIn: true, smooth: true });
 }
 async function nextAct() {
   await walkOut();
   G.save.act++; G.save.sub = null; G.save.fire = null; G.save.drop = null; writeSave();
-  $('#hud').hidden = true; hud.boss.hidden = true;
-  enterAct(G.save.act, { walkIn: true });
+  hud.boss.hidden = true;
+  enterAct(G.save.act, { walkIn: true, smooth: true });
 }
 function grantForm(f) {
   if (!G.save.forms.includes(f)) G.save.forms.push(f);
@@ -319,8 +339,8 @@ function checkArena() {
 }
 function startBoss() {
   const A = G.lvl.arena; A.active = true;
-  G.lvl.solids.push({ x: A.x0 - 20, y: -200, w: 20, h: 500, t: 'g', wall: true, arenaWall: true }, { x: A.x0 + W, y: -200, w: 20, h: 500, t: 'g', wall: true, arenaWall: true });
-  const B = G.boss = makeBoss(A.boss, A.x0 + W - 60);
+  G.lvl.solids.push({ x: A.x0 - 20, y: -200, w: 20, h: 500, t: 'g', wall: true, arenaWall: true }, { x: A.x0 + AW, y: -200, w: 20, h: 500, t: 'g', wall: true, arenaWall: true });
+  const B = G.boss = makeBoss(A.boss, A.x0 + AW - 60);
   if (A.boss === 'labatut') G.dynShade = [{ x: A.x0 + 60, w: 48, vx: 20 }];
   musicSet('boss'); hud.cache = {};
   const D = BOSSES[A.boss];
@@ -379,7 +399,7 @@ const LEVELS = {
     const L2 = LV({ act: 0, biome: 'prologo', name: 'Prólogo — o despertar', w: 1440, start: 40 });
     L2.g(0, 520).g(560, 1440);
     L2.p(250, 124, 36).p(320, 108, 40).b(700, 132, 26, 18).p(860, 118, 40);
-    L2.stump(100).can(150, 70, 3).th(905, 955).can(980, 80, 3).area(1112);
+    L2.stump(180).can(150, 70, 3).th(905, 955).can(980, 80, 3).area(1112);
     L2.g(380, 470, 136).g(740, 830, 134).dthorn(1000).chest(340, 'p_trilha', 108);
     L2.e('crawler', 300).e('crawler', 420).e('flyer', 660, 96).e('spitter', 790).e('crawler', 900).e('flyer', 980, 90);
     L2.f(620, 'p1');
@@ -411,7 +431,7 @@ const LEVELS = {
     const L2 = LV({ act: 1, biome: 'amazonia', name: 'Ato I — Amazônia', w: 2280, start: 30 });
     // seções do mapa do tileset: 1 entrada, 2 rampa, 3 saltos, 4 espinhos, 5 subida, 6 arena
     L2.g(0, 900).g(972, 2280);
-    L2.stump(1240).can(160, 80).pr('malocas', 300).n({ x: 150, spec: NPC.mestraA, f: -1, id: 'mestra', talk: () => talk([['Mestra da zarabatana', 'Quem sopra a zarabatana precisa de fôlego, não de força. Segure o ar e solte três vezes.'], ['Mestra da zarabatana', 'E não respire perto quando a nuvem verde subir.']]) });
+    L2.stump(1750).can(160, 80).pr('malocas', 300).n({ x: 150, spec: NPC.mestraA, f: -1, id: 'mestra', talk: () => talk([['Mestra da zarabatana', 'Quem sopra a zarabatana precisa de fôlego, não de força. Segure o ar e solte três vezes.'], ['Mestra da zarabatana', 'E não respire perto quando a nuvem verde subir.']]) });
     L2.f(230, 'a1');
     L2.ramp(470, 150, 600, 106).br(608, 98, 40);
     L2.isl(922, 128).p(984, 106, 40).br(1048, 80, 44);
@@ -448,7 +468,7 @@ const LEVELS = {
     L2.chest(1025, 'c_pedra', 120).area(1975);
     L2.echo(1150, GY, 'lanterna');
     L2.g(720, 790, 138).g(1760, 1860, 136).chest(580, 'c_chapada', 106).chest(1720, 'c_capim');
-    L2.e('crawler', 420).e('flyer', 560, 80).e('lanceiro', 700).e('spitter', 1020, 120).e('brute', 1200).e('crawler', 2000).e('flyer', 1500, 90).e('brute', 1640).e('spitter', 1780).e('crawler', 1840).e('lanceiro', 900);
+    L2.e('crawler', 420).e('flyer', 560, 80).e('lanceiro', 700).e('spitter', 1020, 120).e('brute', 1200).e('flyer', 1500, 90).e('brute', 1640).e('spitter', 1780).e('crawler', 1840).e('lanceiro', 900);
     L2.f(1890, 'c2');
     L2.gr(2000, 2040).gr(2200, 2245);
     L2.ar(1960, 'capelobo');
@@ -865,8 +885,8 @@ function renderTitle(t) {
   const b = biome('prologo');
   drawBackground(b, t * 6, t);
   rect(ctx, 0, GY, W, 30, b.ground.fill); rect(ctx, 0, GY, W, 2, b.ground.top);
-  ctx.globalAlpha = 0.15 + Math.sin(t * 3) * 0.05; ell(ctx, 160, GY - 11, 12, 15, '#8a7ab0'); ctx.globalAlpha = 1;
-  drawHuman(ctx, 160, GY, 1, { kind: 'idle', t }, SPEC.espirito);
+  ctx.globalAlpha = 0.15 + Math.sin(t * 3) * 0.05; ell(ctx, W / 2, GY - 13, 14, 18, '#8a7ab0'); ctx.globalAlpha = 1;
+  drawHuman(ctx, W / 2, GY, 1, { kind: 'idle', t }, SPEC.espirito);
   for (let i = 0; i < 24; i++) { const x = (hash(i) * W + t * 6 * (hash(i + 1) - 0.5) * 2 + W) % W, y = 40 + hash(i + 2) * 110 + Math.sin(t * 0.7 + i) * 6; ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(t * 1.5 + i)); rect(ctx, x, y, 1, 1, '#b8b0e0'); }
   ctx.globalAlpha = 1;
 }
@@ -939,9 +959,9 @@ function frame(ts) {
     if (G.state === 'play' && UI.dialog) { G.t += dt * 0.15; updateParts(dt * 0.3); }
   }
   ctx.clearRect(0, 0, W, H);
-  if (G.state === 'title') renderTitle(G.rt);
-  else if (G.state === 'scene' && G.sceneDraw) G.sceneDraw(G.rt);
-  else if (G.lvl && G.P) renderWorld();
+  if (G.state === 'title') { ctx.save(); ctx.translate(0, DY); renderTitle(G.rt); ctx.restore(); }
+  else if (G.state === 'scene' && G.sceneDraw) { ctx.save(); ctx.translate(0, DY); G.sceneDraw(G.rt); ctx.restore(); }
+  else if (G.lvl && G.P) { renderWorld(); if (G.trans) drawTransition(); }
   else { rect(ctx, 0, 0, W, H, '#000'); }
   if (G.state === 'play') updateHud();
   requestAnimationFrame(frame);

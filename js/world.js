@@ -3,7 +3,7 @@
 
 const G = {
   state: 'title', save: newSave(), lvl: null, P: null, ents: [], projs: [], parts: [], hazards: [], boss: null,
-  cam: { x: 0, y: 0, shake: 0 }, t: 0, rt: 0, freeze: false, lock: 0, auto: 0, hitstop: 0, heat: 0, heatMul: 1,
+  cam: { x: 0, y: -DY, shake: 0 }, t: 0, rt: 0, freeze: false, lock: 0, auto: 0, hitstop: 0, heat: 0, heatMul: 1,
   dynShade: [], waits: [], interact: null, flash: 0, flashCol: '#fff', dark: 0, sceneDraw: null, rain: 0, flags: {}, speedMul: 1, camTarget: null, fx: [], bfx: [],
 };
 
@@ -35,7 +35,7 @@ function LV(o) {
   L.vine = (x, y0, y1 = GY) => (L.vines.push({ x, y0, y1 }), L);
   L.can = (x, w, vines) => (L.canopies.push({ x, w, vines }), L);
   L.th = (x0, x1, y = GY) => (L.thorns.push({ x0, x1, y }), L);
-  L.stump = x => (L.stumps.push({ x, y: GY }), L.solids.push({ x: x - 12, y: GY - 12, w: 24, h: 12, t: 'g', block: true, vis: 'none' }), L);
+  L.stump = x => (L.stumps.push({ x, y: GY }), L.solids.push({ x: x - 12, y: GY - 30, w: 24, h: 30, t: 'g', block: true, vis: 'none' }), L);
   // elementos interativos: baú, tronco cortado, marca de área, planta sombria e cipós pendentes
   L.chest = (x, id, y = GY) => (L.chests.push({ x, y, id }), L);
   L.log = x => (L.solids.push({ x: x - 15, y: GY - 18, w: 30, h: 18, t: 'g', block: true, vis: 'log' }), L);
@@ -67,11 +67,23 @@ function groundY(x, from = -50) {
 }
 function solidAt(x, y) { for (const s of G.lvl.solids) if (x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h) return s; return null; }
 
+// copas e cipós extras pelo céu: preenchem os trechos sem copa, deixando a arena livre
+function addSkyCanopies(L) {
+  const r = seeded(L.w * 13 + L.id.length * 7), A = L.arena;
+  for (let x = 70; x < L.w - 60; x += 140 + r() * 110) {
+    if (A && x > A.x0 - 40 && x < A.x0 + AW + 40) continue;
+    if (L.canopies.some(c => Math.abs(c.x + c.w / 2 - x) < 100)) continue;
+    const w = 50 + 10 * (r() * 5 | 0);
+    L.canopies.push({ x: Math.round(x - w / 2), w, vines: 2 + (r() * 3 | 0) });
+    if (r() < 0.55) L.hvines.push({ x: Math.round(x + (r() - 0.5) * 50) });
+  }
+}
 function loadLevel(id) {
   const L = LEVELS[id]();
   L.id = id;
   L.solids.push({ x: -20, y: -200, w: 20, h: 500, t: 'g', wall: true }, { x: L.w, y: -200, w: 20, h: 500, t: 'g', wall: true });
   applyWorldState(L);
+  if (!L.cave) addSkyCanopies(L);
   // tufos de grama decorativos
   const r = seeded(id.length * 97 + 3);
   for (const s of L.solids) if (s.t === 'g' && !s.wall && !s.block) for (let x = s.x + 2; x < s.x + s.w - 2; x += 3 + r() * 9 | 0) L.decor.push({ x, y: s.y, h: 1 + r() * 4 | 0, c: r() });
@@ -233,13 +245,19 @@ function moveBody(b, dt) {
     if (b.vy >= 0 && foot >= ry - slack && prevB <= ry + 4 + slack && !(b.onG && b.y + b.h < ry)) { b.y = ry - b.h; b.vy = 0; b.onG = true; b.onRamp = true; b.plat = RAMP_PLAT; }
   }
 }
+// Equilíbrio: de perto bate mais forte e cansa menos; de longe bate mais fraco e cansa mais
+const PERTO = { dmg: 1.3, st: 0.7 }, LONGE = { dmg: 0.75, st: 1.4 };
+const SP_PERTO = { splash: true };
+// De onde sai cada projétil: da ponta da arma na pose de disparo (x à frente do centro, y a partir do topo do corpo)
+const SAIDA = { arrow: [12, 8], firearrow: [12, 7], dart: [19, 4], burst: [19, 4], javelin: [6, 2], throw: [6, 2], drop: [9, 9], seed: [3, -12], orb: [9, 8] };
+function shotOrigin(P, kind) { const o = SAIDA[kind] || [8, 10], foot = P.y + P.h; return [P.x + 5 + P.f * o[0] * HUMAN_S, foot - (22 - o[1]) * HUMAN_S]; }
 function startAttack(cont) {
   const P = G.P, F = FORMS[P.form] || FORMS.espirito, A = F.atk;
   if (!cont) P.combo = 0;
   faceMouse();
   P.def = A.type === 'combo' ? Object.assign({ type: 'melee' }, A.hits[P.combo]) : A;
   P.state = 'attack'; P.stT = 0; P.hitSet = new Set(); P.shot = false;
-  useSt(A.st); SFX.swing();
+  useSt(A.st * PERTO.st); SFX.swing();
   if (P.onG) P.vx = P.f * 30;
   emitNoise(P.x + 5, P.y + 11, 70);
 }
@@ -248,7 +266,7 @@ function startShot() {
   faceMouse();
   P.def = Object.assign({ type: 'shot', dur: 0.3, at: 0.08, st: 9 }, F.shot);
   P.state = 'attack'; P.stT = 0; P.combo = 0; P.shot = false;
-  useSt(P.def.st); SFX.dart();
+  useSt(P.def.st * LONGE.st); SFX.dart();
 }
 // Clique do mouse vira o personagem para o lado do cursor
 function faceMouse() { const P = G.P; if (performance.now() - I.mouseT < 150) P.f = Math.sign(I.mouseWX - (P.x + 5)) || P.f; }
@@ -273,15 +291,15 @@ function attackTick() {
   if (D.type === 'shot') {
     if (!P.shot && P.stT >= D.at) {
       P.shot = true;
-      const x = P.x + 5 + P.f * 8, y = P.y + 10, a = aimAt(x, y, 200);
+      const [x, y] = shotOrigin(P, D.kind), a = aimAt(x, y, 200);
       const g = D.grav || 0, comp = aimAt.d ? g * (aimAt.d / D.spd) / 2 : 0;
-      shoot({ x, y, vx: P.f * Math.cos(a) * D.spd, vy: Math.sin(a) * D.spd - comp, w: 9, h: 9, dmg: D.dmg * dmgMul(), kind: D.kind, grav: D.grav || 0 });
+      shoot({ x, y, vx: P.f * Math.cos(a) * D.spd, vy: Math.sin(a) * D.spd - comp, w: 9, h: 9, dmg: D.dmg * dmgMul() * LONGE.dmg, kind: D.kind, grav: D.grav || 0 });
     }
     return;
   }
   if (P.stT >= D.act[0] && P.stT <= D.act[1]) {
     const hb = { x: P.f > 0 ? P.x + P.w - 2 : P.x + 2 - D.range, y: P.y + 10 - D.h / 2, w: D.range, h: D.h };
-    meleeHit(hb, D.dmg * dmgMul(), P.hitSet, { melee: true });
+    meleeHit(hb, D.dmg * dmgMul() * PERTO.dmg, P.hitSet, { melee: true });
     if (G.debug) G.lastHB = hb;
   }
 }
@@ -297,16 +315,16 @@ function meleeHit(hb, dmg, set, o) {
 function startSpecial() {
   const P = G.P, F = FORMS[P.form];
   P.def = F.sp; P.state = 'special'; P.stT = 0; P.hitSet = new Set(); P.shots = 0;
-  useSt(Math.min(P.st, F.sp.st)); P.spCd = F.sp.cd;
+  useSt(Math.min(P.st, F.sp.st * (SP_PERTO[F.sp.type] ? PERTO.st : LONGE.st))); P.spCd = F.sp.cd;
 }
 function specialTick() {
-  const P = G.P, D = P.def, m = dmgMul(), cx = P.x + 5;
+  const P = G.P, D = P.def, m = dmgMul() * (SP_PERTO[D.type] ? PERTO.dmg : LONGE.dmg), cx = P.x + 5, [ox, oy] = shotOrigin(P, D.type);
   if (D.type === 'burst') {
-    while (P.shots < 3 && P.stT >= 0.08 + P.shots * 0.11) { P.shots++; SFX.dart(); shoot({ x: cx + P.f * 10, y: P.y + 10, vx: P.f * 320, vy: (P.shots - 2) * 25, w: 6, h: 6, dmg: D.dmg * m, kind: 'dart', poison: true }); }
+    while (P.shots < 3 && P.stT >= 0.08 + P.shots * 0.11) { P.shots++; SFX.dart(); shoot({ x: ox, y: oy, vx: P.f * 320, vy: (P.shots - 2) * 25, w: 6, h: 6, dmg: D.dmg * m, kind: 'dart', poison: true }); }
   } else if (D.type === 'firearrow') {
-    if (!P.shots && P.stT >= 0.28) { P.shots = 1; SFX.fire(); shoot({ x: cx + P.f * 10, y: P.y + 8, vx: P.f * 250, vy: -60, w: 8, h: 2, dmg: D.dmg * m, kind: 'fire', grav: 220 }); }
+    if (!P.shots && P.stT >= 0.28) { P.shots = 1; SFX.fire(); shoot({ x: ox, y: oy, vx: P.f * 250, vy: -60, w: 8, h: 2, dmg: D.dmg * m, kind: 'fire', grav: 220 }); }
   } else if (D.type === 'throw') {
-    if (!P.shots && P.stT >= 0.2) { P.shots = 1; SFX.swing(); shoot({ x: cx + P.f * 8, y: P.y + 6, vx: P.f * 330, vy: -10, w: 18, h: 2, dmg: D.dmg * m, kind: 'spear', pierce: true, grav: 40 }); }
+    if (!P.shots && P.stT >= 0.2) { P.shots = 1; SFX.swing(); shoot({ x: ox, y: oy, vx: P.f * 330, vy: -10, w: 18, h: 2, dmg: D.dmg * m, kind: 'spear', pierce: true, grav: 40 }); }
   } else if (D.type === 'splash') {
     if (!P.shots && P.stT >= 0.22) {
       P.shots = 1; SFX.splash(); G.heat = Math.max(0, G.heat - 45);
@@ -575,7 +593,7 @@ function updateCamera(dt) {
   const P = G.P, L = G.lvl, A = L.arena;
   let tx = P.x + 5 - W / 2 + P.f * 22;
   let lo = 0, hi = L.w - W;
-  if (A && A.active) { lo = hi = A.x0; }
+  if (A && A.active) { lo = hi = clamp(A.x0 - (W - AW) / 2, 0, L.w - W); }
   if (G.camTarget != null) tx = G.camTarget;
   tx = clamp(tx, lo, hi);
   G.cam.x = lerp(G.cam.x, tx, Math.min(1, dt * 6));
@@ -586,11 +604,12 @@ function updateCamera(dt) {
 // ---------- Desenho do mundo ----------
 function renderWorld() {
   const L = G.lvl, b = biome(L.biome), cx = Math.round(G.cam.x), t = G.t;
+  ctx.save(); ctx.translate(0, DY);
   drawBackground(b, cx, t);
   if (L.biome === 'cerrado' && G.save.ev && G.save.ev.boitata) drawSkyBoitata(t);
   // cenário progressivo: o fundo escurece e se corrompe à medida que o guardião se aproxima
   const prog = clamp(cx / Math.max(1, (L.arena ? L.arena.x0 : L.w - W)), 0, 1);
-  if (prog > 0) { ctx.globalAlpha = prog * 0.38; rect(ctx, 0, 0, W, H, tpal(L.biome).corrupt); ctx.globalAlpha = 1; }
+  if (prog > 0) { ctx.globalAlpha = prog * 0.38; rect(ctx, 0, -DY, W, H, tpal(L.biome).corrupt); ctx.globalAlpha = 1; }
   ctx.globalAlpha = 0.1; rect(ctx, 0, 118, W, 32, b.mist); ctx.globalAlpha = 0.06; rect(ctx, 0, 132, W, 20, b.mist); ctx.globalAlpha = 1;
   const sx = G.cam.shake ? rnd(-G.cam.shake, G.cam.shake) : 0, sy = G.cam.shake ? rnd(-G.cam.shake, G.cam.shake) : 0;
   ctx.save(); ctx.translate(-cx + Math.round(sx), Math.round(sy));
@@ -665,7 +684,7 @@ function renderWorld() {
     for (const r of L.ramps) line(ctx, r.x0, r.y0, r.x1, r.y1, '#ff0000');
     if (G.lastHB) { ctx.strokeStyle = '#ff0'; ctx.strokeRect(G.lastHB.x, G.lastHB.y, G.lastHB.w, G.lastHB.h); }
   }
-  ctx.restore();
+  ctx.restore(); ctx.restore();
   // efeitos de tela
   if (L.biome === 'caatinga' && G.heat > 40) { ctx.globalAlpha = (G.heat - 40) / 60 * 0.22 * (G.heatMul > 1 ? 1.5 : 1); rect(ctx, 0, 0, W, H, '#ffe0a0'); ctx.globalAlpha = 1; }
   if (G.dark > 0) { ctx.globalAlpha = G.dark; rect(ctx, 0, 0, W, H, '#000'); ctx.globalAlpha = 1; }
@@ -781,7 +800,7 @@ function drawPlayer(P, t) {
   const wpn = (SPEC[P.form] || {}).weapon;
   if (s === 'roll') a = { kind: 'roll', p: P.stT / F.roll.dur };
   else if (s === 'attack' && P.def.type === 'shot') a = { kind: 'shot', p: P.stT / P.def.dur, shot: P.def.kind, at: P.def.at / P.def.dur };
-  else if (s === 'attack') a = { kind: 'attack', p: P.stT / P.def.dur, style: wpn === 'bow' ? ['over', 'sweep', 'thrust'][P.combo] : wpn === 'spear' ? 'thrust' : wpn === 'staff' ? 'over' : wpn === 'blowgun' ? 'jab' : 'claw' };
+  else if (s === 'attack') a = { kind: 'attack', p: P.stT / P.def.dur, style: wpn === 'bow' ? ['over', 'sweep', 'thrust'][P.combo] : wpn === 'spear' ? 'thrust' : wpn === 'staff' || wpn === 'paddle' ? 'over' : wpn === 'blowgun' ? 'jab' : 'claw' };
   else if (s === 'special') a = { kind: 'special', p: P.stT / P.def.dur, shot: P.def.type, at: { burst: 0.16, firearrow: 0.56, throw: 0.44, splash: 0.44, roots: 0.5 }[P.def.type] };
   else if (s === 'heal') a = { kind: 'heal', t };
   else if (s === 'hurt') a = { kind: 'hurt', p: P.stT / 0.28 };
@@ -790,7 +809,7 @@ function drawPlayer(P, t) {
   else if (!P.onG) a = { kind: P.vy < 0 ? 'jump' : 'fall' };
   else if (Math.abs(P.vx) > 12) a = { kind: Math.abs(P.vx) > 55 ? 'run' : 'walk', ph: P.ph };
   else a = { kind: P.kneel ? 'kneel' : 'idle', t };
-  const spec = SPEC[P.form] || SPEC.espirito;
+  const spec = playerSpec(P.form);
   const alpha = P.fadeA != null ? P.fadeA : undefined;
   if (P.form === 'espirito' && !G.flags.noGlow) { ctx.globalAlpha = 0.15 + Math.sin(t * 3) * 0.05; ell(ctx, P.x + 5, P.y + P.h - 11, 10, 13, '#8a7ab0'); ctx.globalAlpha = 1; }
   drawHuman(ctx, P.x + 5, P.y + P.h, P.f, a, spec, P.state === 'hurt' && P.stT < 0.08, alpha);

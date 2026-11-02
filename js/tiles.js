@@ -205,21 +205,37 @@ function drawBlockSolid(s, b) {
 }
 // 11 — toco com raízes: madeira com veios, borda quebrada, oco, raízes largas e samambaia
 function stumpPiece(b) {
-  return tcache(`stump2-${b}`, 48, 40, (x) => {
-    const P = tpal(b), r = seeded(11);
-    const roots = [[20, 24, 8, 30, 1, 39], [21, 26, 13, 34, 10, 39], [27, 26, 36, 33, 40, 39], [28, 24, 40, 29, 47, 39]];
-    for (const q of roots) strokePath(x, curve(...q, 16), 3, P.bark[1], P.out);
-    for (const q of roots) for (const [px, py] of curve(...q, 16)) if (r() < 0.3) rect(x, px, py - 2, 1, 1, P.moss[1]);
-    rect(x, 13, 8, 22, 32, P.out); rect(x, 14, 9, 20, 31, P.bark[1]);
-    for (let i = 0; i < 6; i++) rect(x, 15 + i * 3 + (r() * 2 | 0), 12, 1, 26, i % 2 ? P.bark[2] : P.bark[0]);
-    for (let i = 0; i < 20; i += 2) rect(x, 14 + i, 5 + (hash(i + 3) * 4 | 0), 2, 5, P.bark[1]);
-    ell(x, 24, 11, 7, 2, P.out); ell(x, 24, 11, 6, 1, '#120a06');
-    for (let i = 13; i < 35; i++) if (r() < 0.55) rect(x, i, 35 + r() * 3, 1, 2, P.moss[1]);
-    for (let i = 14; i < 34; i += 3) rect(x, i, 9 + (hash(i) * 3 | 0), 2, 1, P.moss[2]);
-    fern(x, 39, 39, P, r, 0.6);
+  return tcache(`stump3-${b}`, 56, 44, (x) => {
+    const P = tpal(b), r = seeded(11), X0 = 16, X1 = 40, TOP = 11, BOT = 44; // tronco: x 16..40, topo em y 11
+    // raízes largas saindo da base, com luz por cima
+    const roots = [[X0 + 4, 30, 8, 36, 1, 43], [X0 + 6, 33, 12, 39, 8, 43], [X1 - 4, 30, 46, 36, 55, 43], [X1 - 6, 33, 44, 39, 48, 43]];
+    for (const q of roots) strokePath(x, curve(...q, 16), 4, P.bark[1], P.out);
+    for (const q of roots) curve(...q, 16).forEach(([px, py], i) => { if (i % 2) rect(x, px, py - 2, 1, 1, P.bark[0] === P.bark[2] ? P.bark[1] : P.root[2]); if (r() < 0.25) rect(x, px, py - 3, 1, 1, P.moss[1]); });
+    // corpo do tronco: sombra de cilindro (luz à esquerda), placas de casca e rachaduras verticais
+    rect(x, X0 - 1, TOP + 2, X1 - X0 + 2, BOT - TOP - 2, P.out);
+    for (let xx = X0; xx < X1; xx++) { const k = (xx - X0) / (X1 - X0); rect(x, xx, TOP + 3, 1, BOT - TOP - 3, k < 0.2 ? P.bark[1] : k > 0.75 ? P.bark[2] : P.bark[0]); }
+    for (let i = 0; i < 7; i++) { const cx = X0 + 2 + i * 3.3 + (r() * 2 | 0); for (let y = TOP + 5; y < BOT - 1; y++) if (r() < 0.8) rect(x, Math.round(cx + Math.sin(y * 0.3 + i) * 0.8), y, 1, 1, P.bark[2]); }
+    for (let i = 0; i < 14; i++) rect(x, X0 + 2 + r() * (X1 - X0 - 4), TOP + 6 + r() * (BOT - TOP - 10), 2, 1, P.bark[1]);
+    rect(x, X0, TOP + 3, 2, BOT - TOP - 3, P.bark[1]); rect(x, X0, TOP + 3, 1, BOT - TOP - 3, P.root[2]);
+    // nó com buraco escuro
+    ell(x, X0 + 7, TOP + 19, 3, 2, P.out); ell(x, X0 + 7, TOP + 19, 2, 1, '#0c0806'); rect(x, X0 + 5, TOP + 17, 4, 1, P.bark[1]);
+    // topo quebrado: borda serrilhada, face com anéis de crescimento e o oco no meio
+    ell(x, (X0 + X1) / 2, TOP + 4, 13, 4, P.out); ell(x, (X0 + X1) / 2, TOP + 4, 12, 3, P.root[2]);
+    ell(x, (X0 + X1) / 2, TOP + 4, 9, 2, P.bark[1]); ell(x, (X0 + X1) / 2, TOP + 4, 6, 1, P.root[2]);
+    ell(x, (X0 + X1) / 2 + 1, TOP + 4, 3, 1, '#0c0806');
+    for (let xx = X0; xx < X1; xx += 2) { const hgt = 1 + (hash(xx * 3) * 4 | 0); rect(x, xx, TOP + 2 - hgt, 2, hgt + 1, P.bark[xx % 4 ? 0 : 2]); rect(x, xx, TOP + 2 - hgt - 1, 2, 1, P.out); }
+    // musgo no topo, escorrendo pela lateral
+    for (let xx = X0; xx < X1; xx++) if (r() < 0.6) { const d2 = 1 + (r() * 3 | 0); rect(x, xx, TOP + 5, 1, d2, P.moss[r() < 0.5 ? 1 : 2]); if (r() < 0.15) rect(x, xx, TOP + 5 + d2, 1, 2 + (r() * 3 | 0), P.moss[0]); }
+    // hera subindo pelo tronco
+    for (let y = BOT - 2, cx = X1 - 6; y > TOP + 8; y -= 2) { cx += Math.sin(y * 0.4) * 1.2; rect(x, Math.round(cx), y, 1, 2, P.fern[1]); if (y % 6 === 0) { rect(x, Math.round(cx) - 2, y, 2, 1, P.fern[2]); rect(x, Math.round(cx) + 1, y - 1, 2, 1, P.fern[1]); } }
+    // cogumelos na lateral sombreada
+    for (const [mx, my] of [[X1 - 2, TOP + 24], [X1 - 1, TOP + 28]]) { rect(x, mx, my, 4, 2, P.out); rect(x, mx, my - 1, 3, 2, '#c8a46a'); rect(x, mx, my - 1, 1, 1, '#efe0c0'); }
+    // samambaias e capim na base
+    fern(x, 6, BOT - 1, P, r, 0.7); fern(x, 50, BOT - 1, P, r, 0.6);
+    for (let xx = X0 - 2; xx < X1 + 2; xx++) if (r() < 0.5) rect(x, xx, BOT - 2 - (r() * 2 | 0), 1, 3, P.moss[r() < 0.5 ? 1 : 2]);
   });
 }
-function drawStumpPiece(st, b) { ctx.drawImage(stumpPiece(b), st.x - 24, st.y - 40); }
+function drawStumpPiece(st, b) { ctx.drawImage(stumpPiece(b), st.x - 28, st.y - 44); }
 // 03 eco: toco queimado com um machado velho cravado no topo
 function axeStump(x, y) {
   const img = tcache('axestump2', 40, 36, (c) => {

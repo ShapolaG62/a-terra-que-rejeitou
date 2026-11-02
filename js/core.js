@@ -1,6 +1,7 @@
 'use strict';
 // Núcleo: tela, layout, entrada (teclado, toque, controle), áudio e save.
-const W = 320, H = 180, GY = 150; // GY = altura padrão do chão
+const W = 384, H = 216, GY = 150; // GY = altura padrão do chão (área visível 20% maior que 320×180)
+const DY = H - 180, AW = 320;          // DY: céu a mais em cima; AW: largura das arenas dos guardiões
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 ctx.imageSmoothingEnabled = false;

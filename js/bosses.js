@@ -8,7 +8,7 @@ function makeBoss(kind, x) {
   return B;
 }
 function bossBox(B) { return { x: B.x - B.w / 2, y: B.y - B.h, w: B.w, h: B.h }; }
-function arenaX() { const A = G.lvl.arena; return [A.x0 + 16, A.x0 + W - 16]; }
+function arenaX() { const A = G.lvl.arena; return [A.x0 + 16, A.x0 + AW - 16]; }
 function go(B, st, tt) { B.st = st; B.tt = tt; B.done = false; }
 function bossHurt(B, dmg, dir, o = {}) {
   if (['intro', 'down', 'still', 'ask', 'yield'].includes(B.st) || B.inv) return false;

@@ -69,7 +69,7 @@ async function travelMenu() {
   return a === 'back' ? null : a;
 }
 async function travelTo(id, x) {
-  await fade(true);
+  snapshotScene();
   const form = G.P.form;
   loadLevel(id);
   // visita: o guardião já foi vencido e as cenas já aconteceram
@@ -79,7 +79,7 @@ async function travelTo(id, x) {
   if (x == null && f0) { G.save.fire = { lvl: id, x: f0.x }; G.save.lit[f0.id] = 1; }
   writeSave();
   G.cam.x = clamp(px - W / 2, 0, G.lvl.w - W); G.state = 'play'; $('#hud').hidden = false; updateHudForm(); hud.cache = {};
-  await fade(false);
+  startSlide(); showToast(G.lvl.name, '', 2.4);
 }
 
 // ---------- Selos de Cipós-de-Sangue ----------
@@ -109,24 +109,78 @@ function openBridge(b) {
     showToast('Atalho aberto', 'o tronco caiu sobre o poço', 2.2);
   });
 }
+// fundo de cada selo: o que os cipós escondem (desenhado com textura própria)
+function drawGateBack(g, t) {
+  const x = Math.round(g.x), gy = g.y, w = g.w, h = g.h, r = seeded(Math.round(g.x) * 7 + 3), L = x - w / 2;
+  if (g.kind === 'templo') {
+    // pórtico de pedra antiga: blocos com juntas, verga entalhada, musgo escorrendo e soleira
+    const X0 = L - 9, W0 = w + 18, Y0 = gy - h - 12;
+    rect(ctx, X0 - 1, Y0 - 1, W0 + 2, h + 13, '#1a1c14'); rect(ctx, X0, Y0, W0, h + 12, '#4a5240');
+    for (let row = 0, y = Y0 + 6; y < gy; row++, y += 6) { rect(ctx, X0, y, W0, 1, '#363c2e'); for (let xx = X0 + (row % 2 ? 4 : 9); xx < X0 + W0; xx += 11) rect(ctx, xx, y - 5, 1, 5, '#363c2e'); }
+    for (let i = 0; i < 18; i++) rect(ctx, X0 + r() * W0, Y0 + r() * (h + 10), 1 + (r() * 2 | 0), 1, r() < 0.5 ? '#5e6650' : '#3e4434');
+    rect(ctx, X0 - 3, Y0 - 3, W0 + 6, 6, '#5e6650'); rect(ctx, X0 - 3, Y0 - 3, W0 + 6, 1, '#7a8468'); rect(ctx, X0 - 3, Y0 + 2, W0 + 6, 1, '#2e3226');
+    for (let i = 0; i < 5; i++) { const gx = X0 + 4 + i * (W0 - 8) / 4; rect(ctx, gx - 1, Y0 - 1, 3, 2, '#8a9a6a'); rect(ctx, gx, Y0 - 2, 1, 4, '#2e3226'); }
+    for (let i = 0; i < W0 + 6; i += 2) { const d2 = 1 + (r() * 4 | 0); rect(ctx, X0 - 3 + i, Y0 + 3, 1, d2, i % 4 ? '#3a6a2a' : '#5a8a3a'); }
+    rect(ctx, L - 2, gy - h - 2, w + 4, h + 2, '#2a2e22');
+    for (let y = 0; y < h; y++) rect(ctx, L, gy - h + y, w, 1, y < 4 ? '#14120c' : '#0a0806');
+    rect(ctx, X0 - 4, gy - 2, W0 + 8, 2, '#5e6650'); rect(ctx, X0 - 4, gy - 2, W0 + 8, 1, '#7a8468');
+  } else if (g.kind === 'arvore') {
+    // tronco oco: casca com sulcos e nós, borda quebrada no alto, musgo, raízes saindo na base e o oco escuro
+    const X0 = L - 11, W0 = w + 22, top = gy - h - 26;
+    for (let xx = 0; xx < W0; xx++) { const ty = top + Math.round(Math.abs(Math.sin(xx * 0.9 + 1)) * 4 + (xx % 5 === 0 ? 2 : 0)); rect(ctx, X0 + xx, ty, 1, gy - ty, xx < 3 ? '#2a1c12' : xx > W0 - 4 ? '#24180e' : '#3e2c1c'); }
+    for (let i = 0; i < 7; i++) { const sx = X0 + 3 + i * (W0 - 6) / 6; for (let y = top + 4; y < gy - 1; y += 1) if (r() < 0.85) rect(ctx, Math.round(sx + Math.sin(y * 0.25 + i) * 1.2), y, 1, 1, i % 2 ? '#2a1c12' : '#523a26'); }
+    for (let i = 0; i < 3; i++) { const kx = X0 + 4 + r() * (W0 - 8), ky = top + 8 + r() * (h - 4); ell(ctx, kx, ky, 2, 1, '#22160c'); rect(ctx, kx - 1, ky - 1, 2, 1, '#6a4a30'); }
+    for (let xx = 0; xx < W0; xx += 1) if (r() < 0.6) rect(ctx, X0 + xx, top + 3 + Math.round(Math.abs(Math.sin(xx * 0.9 + 1)) * 4), 1, 1 + (r() * 3 | 0), r() < 0.5 ? '#4a7a2e' : '#6a9a3a');
+    for (const dir of [-1, 1]) for (let k2 = 0; k2 < 2; k2++) strokePath(ctx, curve(x + dir * (W0 / 2 - 3), gy - 4 - k2 * 3, x + dir * (W0 / 2 + 4), gy - 2, x + dir * (W0 / 2 + 9 + k2 * 4), gy, 8), 2, '#3e2c1c', '#160e08');
+    ell(ctx, x, gy - h * 0.45, w / 2 + 2, (h * 0.45 | 0) + 2, '#22160c'); ell(ctx, x, gy - h * 0.45, w / 2, h * 0.45 | 0, '#0a0604'); ell(ctx, x + 1, gy - h * 0.42, w / 2 - 3, (h * 0.35 | 0), '#050302');
+  } else if (g.kind === 'nicho' || g.kind === 'altar') {
+    // nicho cavado na rocha: moldura com rachaduras e lascas, fundo que escurece para dentro
+    rect(ctx, L - 5, gy - h - 5, w + 10, h + 5, '#2a231e'); rect(ctx, L - 4, gy - h - 4, w + 8, h + 4, '#3a3029');
+    for (let i = 0; i < 10; i++) rect(ctx, L - 4 + r() * (w + 8), gy - h - 4 + r() * 4, 2, 1, '#4a3e34');
+    for (let i = 0; i < 3; i++) { let cx = L - 3 + r() * (w + 6), cy = gy - h - 4; for (let k2 = 0; k2 < 5; k2++) { rect(ctx, cx, cy, 1, 1, '#1a1410'); cx += (r() * 2 | 0) - 0.5; cy += 1; } }
+    for (let y = 0; y < h; y++) rect(ctx, L, gy - h + y, w, 1, y < 3 ? '#1a1510' : '#0c0a08');
+    if (g.kind === 'altar') { rect(ctx, x - 13, gy - 11, 26, 11, '#5a4a3c'); rect(ctx, x - 15, gy - 13, 30, 3, '#8a7a6a'); rect(ctx, x - 15, gy - 13, 30, 1, '#a89a88'); for (let i = 0; i < 4; i++) rect(ctx, x - 10 + i * 6, gy - 8, 3, 3, '#3e3228'); for (let i = 0; i < 6; i++) rect(ctx, x - 8 + i * 3, gy - 14 - (i % 2), 2, 1, '#b8aca0'); }
+  } else if (g.kind === 'raizes') {
+    // raízes mortas e retorcidas descendo para uma trilha escura
+    rect(ctx, L - 2, gy - h, w + 4, h, '#140c08');
+    for (let i = 0; i < 6; i++) strokePath(ctx, curve(L - 4 + i * (w + 8) / 5, gy, L + 2 + i * w / 5 + Math.sin(i) * 4, gy - h * 0.5, L + i * (w / 5) + 4, gy - h - 2, 12), 2, i % 2 ? '#3a2a1c' : '#2a1c12', '#0e0806');
+  }
+}
+// Cipós-de-Sangue: troncos grossos trançados, cipós finos cruzados, espinhos, bulbos que pulsam,
+// gavinhas enroladas no alto, amarras horizontais, raízes negras se espalhando no chão e seiva pingando
+function bloodVine(pts, th, base, hi, seed, pulse) {
+  strokePath(ctx, pts, th, base, '#12040a');
+  pts.forEach(([px, py], j) => {
+    if (th > 1 && j % 2 === 0) rect(ctx, px - (th >> 1), py, 1, 1, hi);                                   // brilho de um lado
+    if (th > 1 && j % 3 === 1) rect(ctx, px + (th >> 1), py, 1, 1, '#2a0610');                             // sombra do outro
+    if (j % 6 === (seed % 6) && j > 1) { const sd = (j + seed) % 2 ? 1 : -1; rect(ctx, px + sd * (th / 2 + 1), py - 1, 1, 1, '#0e0206'); rect(ctx, px + sd * (th / 2 + 2), py - 2, 1, 1, '#d8b0a8'); } // espinho
+    if (th > 1 && j % 9 === (seed % 9)) { rect(ctx, px - 1, py - 1, 3, 3, '#3a0610'); rect(ctx, px, py, 1, 1, pulse > 0.5 ? '#ff6a7a' : '#e02a3e'); } // bulbo
+  });
+}
 function drawBloodGate(g, t) {
   const open = gateOpen(g.id), x = g.x, gy = g.y, w = g.w, h = g.h;
-  // o que o selo esconde: porta de templo, oco de árvore, nicho de pedra ou altar
-  if (g.kind === 'templo') { rect(ctx, x - w / 2 - 8, gy - h - 10, w + 16, h + 10, '#4a5240'); rect(ctx, x - w / 2 - 8, gy - h - 10, w + 16, 4, '#6a7458'); for (let i = 0; i < 5; i++) rect(ctx, x - w / 2 - 6 + i * (w + 12) / 4, gy - h - 6, 2, 2, '#8a9a6a'); rect(ctx, x - w / 2, gy - h, w, h, '#0a0806'); }
-  else if (g.kind === 'arvore') { rect(ctx, x - w / 2 - 10, gy - h - 24, w + 20, h + 24, '#3a2a1c'); for (let i = 0; i < 6; i++) rect(ctx, x - w / 2 - 8 + i * 6, gy - h - 22, 2, h + 20, '#4a3624'); ell(ctx, x, gy - h * 0.45, w / 2, h * 0.45 | 0, '#0a0806'); }
-  else if (g.kind === 'nicho' || g.kind === 'altar') { rect(ctx, x - w / 2 - 4, gy - h - 4, w + 8, h + 4, '#3a3029'); rect(ctx, x - w / 2, gy - h, w, h, '#0c0a08'); if (g.kind === 'altar') { rect(ctx, x - 12, gy - 10, 24, 10, '#6a5a4a'); rect(ctx, x - 14, gy - 12, 28, 3, '#8a7a6a'); } }
-  else if (g.kind === 'raizes') { for (let i = 0; i < 5; i++) line(ctx, x - 14 + i * 7, gy, x - 10 + i * 5, gy - h, '#2a1a12', 2); }
+  drawGateBack(g, t);
   if (open && g.dis == null) return;
-  const k = g.dis != null ? 1 - g.dis : 1, pulse = (Math.sin(t * 3 + x) + 1) / 2;
-  ctx.globalAlpha = k;
-  // cipós trançados com veios rubros pulsando e raízes enegrecidas na base
-  for (let i = 0; i < 7; i++) {
-    const bx = x - w / 2 + i * w / 6, pts = curve(bx, gy, bx + Math.sin(i * 1.7) * 8, gy - h * 0.5, bx + Math.sin(i * 2.3 + 1) * 6, gy - h, 16);
-    strokePath(ctx, pts, 3, i % 2 ? '#4a0a12' : '#5e1018', '#12040a');
-    pts.forEach(([px, py], j) => { if ((j + i) % 4 === 0) rect(ctx, px, py, 1, 2, pulse > 0.5 ? '#ff3a4a' : '#c8203a'); });
+  const k = g.dis != null ? 1 - g.dis : 1, pulse = (Math.sin(t * 3 + x) + 1) / 2, L = x - w / 2, seed = Math.round(x);
+  // brilho rubro atrás dos cipós
+  ctx.globalAlpha = k * (0.1 + pulse * 0.06); ell(ctx, x, gy - h / 2, w / 2 + 8, h / 2 + 6, '#c8203a'); ctx.globalAlpha = k;
+  // raízes negras se espalhando no chão, com veios vermelhos
+  for (let i = 0; i < 6; i++) { const dir = i % 2 ? 1 : -1, len = 8 + (i * 5) % 11; const pts = curve(x + dir * (w / 4), gy - 1, x + dir * (w / 2 + len * 0.5), gy - 3, x + dir * (w / 2 + len), gy, 10); strokePath(ctx, pts, 2, '#1a0608', '#060204'); rect(ctx, pts[5][0], pts[5][1], 1, 1, '#a0182a'); }
+  // cipós finos atravessados (fundo)
+  for (let i = 0; i < 3; i++) { const fromL = i % 2 === 0, y0 = gy - h * (0.15 + i * 0.28); bloodVine(curve(fromL ? L - 2 : L + w + 2, y0, x + (fromL ? 3 : -3), y0 - h * 0.12, fromL ? L + w + 2 : L - 2, y0 - h * 0.26, 14), 1, '#3e0812', '#7a1422', seed + i, pulse); }
+  // troncos principais trançados (frente)
+  const n = Math.max(2, Math.round(w / 9));
+  for (let i = 0; i < n; i++) {
+    const bx = L + (i + 0.5) * w / n, sw = (i % 2 ? 1 : -1) * Math.min(6, w / n);
+    bloodVine(curve(bx, gy, bx + sw, gy - h * 0.5, bx - sw * 0.6, gy - h, 20), 2, i % 2 ? '#4a0a12' : '#5e1018', '#9a2030', seed + i * 3, pulse);
   }
-  for (let i = 0; i < 4; i++) { const yy = gy - h * (0.2 + i * 0.22); line(ctx, x - w / 2 - 2, yy, x + w / 2 + 2, yy + Math.sin(i * 2) * 4, '#3a0610', 2); }
-  for (let i = -2; i <= 2; i++) line(ctx, x + i * 5, gy, x + i * 9, gy + 2, '#0a0406', 2);
+  // amarras horizontais envolvendo os troncos
+  for (let i = 0; i < 2; i++) { const yy = gy - h * (0.33 + i * 0.33); bloodVine(curve(L - 3, yy + 2, x, yy - 2 + Math.sin(i * 2) * 2, L + w + 3, yy + 1, 18), 1, '#3a0610', '#8a1a28', seed + 11 + i, pulse); }
+  // gavinhas enroladas saindo pelo alto
+  for (let i = 0; i < 2; i++) { const bx = L + (i + 0.5) * w / 2, top = gy - h; const pts = []; for (let j = 0; j <= 12; j++) { const a = j * 0.55, rr = 4 - j * 0.28; pts.push([bx + Math.sin(a + i) * rr, top - j * 0.9 + Math.cos(a + i) * rr * 0.4]); } strokePath(ctx, pts, 1, '#5e1018', '#12040a'); }
+  // seiva pingando
+  for (let i = 0; i < 2; i++) { const p = (t * 0.5 + i * 0.5 + (seed % 7) * 0.1) % 1, dx2 = L + w * (0.3 + i * 0.4); ctx.globalAlpha = k * (1 - p); rect(ctx, dx2, gy - h * 0.4 + p * h * 0.4, 1, 2, '#c8203a'); }
+  ctx.globalAlpha = k;
   // depois de ganhar o fogo frio: brilho azul discreto avisando que o selo pode ser aberto
   if (G.save.cold && g.dis == null) { ctx.globalAlpha = 0.5 + pulse * 0.4; for (let i = 0; i < 3; i++) { const a = t * 2 + i * 2.1; rect(ctx, x + Math.cos(a) * (w / 2 + 4), gy - h / 2 + Math.sin(a) * h / 2, 1, 1, '#bfe4ff'); } }
   ctx.globalAlpha = 1;
@@ -278,7 +332,7 @@ function drawCaveFront(L, t) {
   const P = G.P;
   if (L.cave && P && !P.hidden && P.state !== 'dead') {
     // tocha na mão: chama viva, ou só brasa e fumaça quando um morcego apagou
-    const hx = P.x + 5 + P.f * 6, hy = P.y + 9;
+    const hx = P.x + 5 + P.f * 6 * HUMAN_S, hy = P.y + P.h - 13 * HUMAN_S;
     line(ctx, hx, hy, hx + P.f * 2, hy - 7, '#5a3a22');
     if (G.torchOut > 0) { rect(ctx, hx + P.f * 2, hy - 8, 1, 1, '#c8402e'); if (Math.random() < 0.2) part(hx + P.f * 2, hy - 9, rnd(-4, 4), -12, 1, '#4a4448', 1, -5); }
     else { const f2 = Math.sin(t * 20) > 0 ? 1 : 0; rect(ctx, hx + P.f * 2 - 1, hy - 11 - f2, 3, 3, '#ff8a3a'); rect(ctx, hx + P.f * 2, hy - 13 - f2, 1, 3, '#ffd27a'); rect(ctx, hx + P.f * 2, hy - 10, 1, 1, '#fff0b0'); }
@@ -521,7 +575,7 @@ function breakSupport(B, s) {
 }
 function boitataFreedTick(B, dt) {
   // cai exausta; depois se ergue, olha e sai pela abertura do teto
-  const A = G.lvl.arena, ox = A.x0 + W / 2;
+  const A = G.lvl.arena, ox = A.x0 + AW / 2;
   // sobe até a cauda inteira passar pela abertura (o corpo tem ~160px), com limite de tempo de segurança
   if (B.leaving) { B.leaveT = (B.leaveT || 0) + dt; B.x += clamp(ox - B.x, -1, 1) * 60 * dt; B.y -= 130 * dt; if (B.seg[B.seg.length - 1].y < -20 || B.leaveT > 6) B.gone = true; }
   else if (B.rise) { B.y += ((GY - 40) - B.y) * 2 * dt; B.f = Math.sign(G.P.x - B.x) || B.f; }
@@ -578,7 +632,7 @@ STORY.boitataFreed = async function (B) {
   for (let i = 0; i <= 40; i++) { B.revive = i / 40; await wait(0.05); }
   B.revive = 0; B.rise = true; await wait(1.2);
   await talk([['', 'Uma pequena chama percorre as escamas. O Boitatá se ergue e olha para você.'], ['Espírito', 'Você não precisava ser vencido. Só precisava ser solto.']]);
-  B.leaving = true; G.lvl.lights.push({ x: G.lvl.arena.x0 + W / 2, y: 0, r: 80 });
+  B.leaving = true; G.lvl.lights.push({ x: G.lvl.arena.x0 + AW / 2, y: 0, r: 80 });
   await waitUntil(() => B.gone);
   G.boss = null;
   await talk([['', 'Antes de partir, uma escama se desprende e vira uma chama azul-esbranquiçada. Ela flutua até você.']]);
