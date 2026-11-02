@@ -1,0 +1,506 @@
+'use strict';
+// Arte procedural em pixel: fundos de bioma (parallax) e sprites desenhados por código.
+
+function mk(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.imageSmoothingEnabled = false; return [c, x]; }
+function rect(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
+function ell(c, cx, cy, rx, ry, col) { c.fillStyle = col; for (let dy = -ry; dy <= ry; dy++) { const hw = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2))); c.fillRect(Math.round(cx - hw), Math.round(cy + dy), hw * 2, 1); } }
+function line(c, x0, y0, x1, y1, col, th = 1) {
+  c.fillStyle = col; x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
+  const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1; let e = dx + dy;
+  for (let i = 0; i < 2000; i++) { c.fillRect(x0, y0, th, th); if (x0 === x1 && y0 === y1) break; const e2 = 2 * e; if (e2 >= dy) { e += dy; x0 += sx; } if (e2 <= dx) { e += dx; y0 += sy; } }
+}
+const BAYER = [0, 2, 3, 1];
+function dither(c, x, y, w, h, col, d) { c.fillStyle = col; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const px = x + i, py = y + j; if (BAYER[(px & 1) + ((py & 1) << 1)] / 4 < d) c.fillRect(px, py, 1, 1); } }
+function bands(c, cols, y0, y1, w) {
+  const n = cols.length, bh = (y1 - y0) / n;
+  for (let i = 0; i < n; i++) rect(c, 0, y0 + i * bh, w, bh + 1, cols[i]);
+  if (y1 < H) rect(c, 0, y1, w, H - y1, cols[n - 1]);
+  for (let i = 0; i < n - 1; i++) { const by = Math.round(y0 + (i + 1) * bh); dither(c, 0, by - 3, w, 1, cols[i + 1], 0.25); dither(c, 0, by - 2, w, 1, cols[i + 1], 0.5); dither(c, 0, by - 1, w, 1, cols[i + 1], 0.75); }
+}
+function streak(c, x, y, len, col, hi) { rect(c, x + len * 0.15, y - 1, len * 0.6, 1, hi || col); rect(c, x, y, len, 2, col); rect(c, x + len * 0.25, y + 2, len * 0.55, 1, col); }
+function branch(c, x, y, ang, len, d, col, r, leaf) {
+  const x1 = x + Math.cos(ang) * len, y1 = y + Math.sin(ang) * len;
+  line(c, x, y, x1, y1, col, d > 2 ? 2 : 1);
+  if (d <= 0) { if (leaf) leaf(x1, y1); return; }
+  const n = 2 + (r() < 0.3 ? 1 : 0);
+  for (let i = 0; i < n; i++) branch(c, x1, y1, ang + (r() - 0.5) * 1.3, len * (0.6 + r() * 0.2), d - 1, col, r, leaf);
+}
+// Árvore de copa achatada (samaúma / castanheira)
+function canopyTree(c, x, base, h, rw, col, r, vines) {
+  rect(c, x - 2, base - h, 4, h, col);
+  ell(c, x, base - h, rw, Math.max(3, rw * 0.22 | 0), col);
+  if (vines) for (let i = 0; i < 5; i++) { const vx = x - rw + r() * rw * 2; rect(c, vx, base - h + 2, 1, 6 + r() * 18, col); }
+}
+function palm(c, x, base, h, col, r, droop) {
+  let tx = x, ty = base;
+  for (let i = 0; i < h; i++) { rect(c, Math.round(tx), ty - i, 2, 1, col); tx += (r() - 0.5) * 0.5; }
+  const top = base - h;
+  for (let i = 0; i < 9; i++) { const a = -Math.PI + i * Math.PI / 8; const L2 = 9 + r() * 6; line(c, tx, top, tx + Math.cos(a) * L2, top + Math.sin(a) * L2 * 0.55 + (droop ? L2 * 0.5 : 2), col); }
+}
+function mesa(c, x, w, top, base, col, hi) { for (let y = top; y < base; y++) { const k = (y - top) / (base - top); const ww = w + k * 40; rect(c, x - ww / 2, y, ww, 1, col); } if (hi) rect(c, x - w / 2, top, w, 2, hi); }
+
+// ---------- Biomas ----------
+// Cada bioma: céu (estático) + camadas que repetem a cada 640px + paleta do chão.
+const BG_CACHE = {};
+function biome(id) { return BG_CACHE[id] || (BG_CACHE[id] = Object.assign(BIOME_BUILD[id](), { id })); }
+const LW = 640;
+const BIOME_BUILD = {
+  prologo() {
+    const r = seeded(11);
+    const [sky, s] = mk(W, H); bands(s, ['#11131c', '#161a25', '#1d222f', '#252b3a', '#2f3646', '#3a4152'], 0, 150, W);
+    ell(s, 252, 38, 11, 11, '#b9bccb'); ell(s, 249, 36, 3, 3, '#a2a6b8'); ell(s, 256, 42, 2, 2, '#a2a6b8');
+    for (let i = 0; i < 40; i++) rect(s, r() * W, r() * 90, 1, 1, '#6a7088');
+    const [cl, a] = mk(LW, H); for (let i = 0; i < 10; i++) streak(a, r() * LW, 20 + r() * 60, 40 + r() * 80, '#2b3142', '#3a4152');
+    const [far, b] = mk(LW, H);
+    for (let x = 0; x < LW; x++) { const h = 22 + Math.sin(x / 40) * 8 + Math.sin(x / 13) * 3; rect(b, x, 150 - h, 1, h + 30, '#232836'); }
+    for (let i = 0; i < 14; i++) { const x = r() * LW; branch(b, x, 140, -Math.PI / 2, 14 + r() * 10, 3, '#1c202b', r); }
+    const [mid, m] = mk(LW, H);
+    for (let i = 0; i < 6; i++) { const x = 40 + i * 105 + r() * 30; rect(m, x, 30, 5, 130, '#12151d'); branch(m, x + 2, 70, -Math.PI / 2 - 0.4, 22, 3, '#12151d', r); branch(m, x + 2, 60, -Math.PI / 2 + 0.5, 20, 3, '#12151d', r); }
+    return { sky, layers: [{ c: cl, f: 0.03 }, { c: far, f: 0.08 }, { c: mid, f: 0.2 }], mist: '#5a6278', ground: { top: '#3b4252', fill: '#191c25', dark: '#11131a', speck: '#2a2f3c', plat: '#2a2f3c' }, motes: '#8a90b0' };
+  },
+  // Fundos em camadas, inspirados na prancha "Fundos de bioma": quanto mais longe, menor, mais claro e mais lento.
+  amazonia() {
+    const r = seeded(21);
+    const [sky, s] = mk(W, H); bands(s, ['#7e8466', '#969a72', '#b0ac7e', '#c8bc8a', '#d8ca96', '#d2c892', '#b8b886', '#9cab82'], 0, 150, W);
+    const [cl, a] = mk(LW, H);
+    for (let i = 0; i < 12; i++) { const x = r() * LW, y = 14 + r() * 60, w2 = 30 + r() * 70; ell(a, x, y, w2 / 2 | 0, 4 + r() * 4 | 0, '#a8a47a'); ell(a, x - 4, y - 2, w2 / 2.6 | 0, 3 + r() * 3 | 0, '#e6dcac'); }
+    const [far, b] = mk(LW, H);
+    for (let x = 0; x < LW; x += 9 + r() * 10 | 0) { const h = 18 + r() * 14; ell(b, x, 132 - h * 0.5, 7 + r() * 6 | 0, 4 + r() * 3 | 0, '#a8b48e'); rect(b, x - 1, 132 - h * 0.5, 2, h, '#a8b48e'); }
+    rect(b, 0, 128, LW, 52, '#a8b48e');
+    const [f2, c] = mk(LW, H);
+    for (let i = 0; i < 16; i++) canopyTree(c, r() * LW, 140, 22 + r() * 22, 9 + r() * 8, '#82987c', r);
+    for (let i = 0; i < 22; i++) ell(c, r() * LW, 134 + r() * 6, 8 + r() * 8 | 0, 5, '#82987c');
+    rect(c, 0, 138, LW, 42, '#82987c');
+    ctx2fog(c, 120, 30, '#c8c896', 0.25);
+    const [mid, m] = mk(LW, H);
+    for (let i = 0; i < 6; i++) {
+      const x = 40 + i * 110 + r() * 40, h = 60 + r() * 30, rw = 18 + r() * 10;
+      rect(m, x - 3, 150 - h, 6, h, '#5e7a68');
+      for (let k = 0; k < 8; k++) rect(m, x - 3 - k, 150 - k * 2, 6 + k * 2, 2, '#5e7a68');
+      ell(m, x, 150 - h, rw, 9, '#5e7a68'); ell(m, x - rw * 0.5, 150 - h + 4, rw * 0.6 | 0, 6, '#5e7a68'); ell(m, x + rw * 0.5, 150 - h + 3, rw * 0.6 | 0, 6, '#5e7a68');
+      ell(m, x - 3, 150 - h - 3, rw * 0.7 | 0, 4, '#6e8a74');
+      for (let v = 0; v < 4; v++) { const vx = x - rw + r() * rw * 2; for (let y = 0; y < 10 + r() * 22; y++) rect(m, vx + Math.sin(y * 0.3) * 1.2, 150 - h + 6 + y, 1, 1, '#5e7a68'); }
+    }
+    for (let i = 0; i < 18; i++) fernSil(m, r() * LW, 150, 5 + r() * 5, '#4e6a5a', r);
+    ctx2fog(m, 128, 22, '#b8bc8e', 0.18);
+    return { sky, layers: [{ c: cl, f: 0.02, drift: 1.2 }, { c: far, f: 0.05 }, { c: f2, f: 0.11 }, { c: mid, f: 0.2 }], mist: '#c8c896', ground: { top: '#2f5a3e', fill: '#14291f', dark: '#0d1c15', speck: '#1f3d2c', plat: '#3a2a1c' }, motes: '#e8f0a0' };
+  },
+  cerrado() {
+    const r = seeded(31);
+    const [sky, s] = mk(W, H); bands(s, ['#4a2438', '#6e2e3e', '#9a3e3e', '#c4583e', '#dc7442', '#ea924c', '#f2aa5a', '#f4bc6a'], 0, 150, W);
+    ell(s, 200, 118, 16, 16, '#f8d27a'); ell(s, 200, 118, 12, 12, '#fff0b0');
+    const [cl, a] = mk(LW, H);
+    for (let i = 0; i < 10; i++) { const x = r() * LW, y = 12 + r() * 56, w2 = 30 + r() * 80; ell(a, x, y, w2 / 2 | 0, 3 + r() * 3 | 0, '#8a3a46'); ell(a, x + 3, y - 2, w2 / 2.4 | 0, 2 + r() * 2 | 0, '#f0a050'); }
+    const [far, b] = mk(LW, H);
+    for (let i = 0; i < 5; i++) mesa(b, 60 + i * 130 + r() * 30, 50 + r() * 50, 104 + r() * 10, 140, '#c47a5c', '#d68c66');
+    rect(b, 0, 136, LW, 44, '#c47a5c');
+    const [f2, c] = mk(LW, H);
+    for (let i = 0; i < 4; i++) mesa(c, 90 + i * 160 + r() * 40, 30 + r() * 30, 116 + r() * 6, 146, '#9a4e44', '#b0604c');
+    rect(c, 0, 142, LW, 38, '#9a4e44');
+    for (let i = 0; i < 6; i++) { const x = r() * LW, h = 5 + r() * 4; for (let y = 0; y < h; y++) rect(c, x - (h - y) * 0.4, 142 - y, (h - y) * 0.8 + 1, 1, '#8a4038'); }
+    const [mid, m] = mk(LW, H);
+    for (let i = 0; i < 7; i++) acacia(m, 30 + i * 92 + r() * 30, 150, 22 + r() * 14, '#5a2a2e', '#7a3a34', r);
+    for (let i = 0; i < 10; i++) { const x = r() * LW, h = 7 + r() * 5; for (let y = 0; y < h; y++) rect(m, x - (h - y) * 0.45, 150 - y, (h - y) * 0.9 + 1, 1, '#5a2a2e'); }
+    for (let x = 0; x < LW; x += 2) if (r() < 0.5) rect(m, x, 150 - 2 - r() * 4, 1, 6, r() < 0.5 ? '#6a3430' : '#8a4a34');
+    ctx2fog(m, 130, 20, '#f0a060', 0.14);
+    return { sky, layers: [{ c: cl, f: 0.02, drift: 1 }, { c: far, f: 0.05 }, { c: f2, f: 0.1 }, { c: mid, f: 0.2 }], mist: '#f0a060', ground: { top: '#5a2c2a', fill: '#2a1420', dark: '#1c0c16', speck: '#3c1c26', plat: '#4a2a22' }, motes: '#ffb050', grass: '#d99a3a' };
+  },
+  pantanal() {
+    const r = seeded(41);
+    const [sky, s] = mk(W, H); bands(s, ['#3a2a5e', '#52367a', '#74488c', '#9a5e96', '#c47c98', '#e29a94', '#f2b88e', '#f8cc8a'], 0, 112, W);
+    ell(s, 150, 112, 15, 14, '#ffe2a0'); ell(s, 150, 112, 11, 10, '#fff2c8');
+    bands(s, ['#d8a0a0', '#b88098', '#946690', '#745080', '#583e70', '#463062'], 112, 160, W);
+    for (let i = 0; i < 46; i++) { const y = 114 + r() * 40, k = (y - 112) / 48, x = 150 + (r() - 0.5) * 70 * (1 + k); rect(s, x, y, 2 + r() * 8 * (1 - k), 1, r() < 0.5 ? '#ffe2a0' : '#f6c88e'); }
+    const [cl, a] = mk(LW, H);
+    for (let i = 0; i < 12; i++) { const x = r() * LW, y = 12 + r() * 60, w2 = 30 + r() * 70; ell(a, x, y, w2 / 2 | 0, 2 + r() * 3 | 0, '#8a5a94'); ell(a, x - 3, y - 1, w2 / 2.6 | 0, 2, '#f4b494'); }
+    const [far, b] = mk(LW, H);
+    for (let x = 0; x < LW; x++) rect(b, x, 108 - (Math.sin(x / 40) + 1) * 2 - hash(x) * 2, 1, 4 + (Math.sin(x / 40) + 1) * 2, '#8a6898');
+    for (let i = 0; i < 18; i++) palm(b, r() * LW, 108, 8 + r() * 6, '#7a5a8e', r, true);
+    const [f2, c] = mk(LW, H);
+    for (let i = 0; i < 4; i++) {
+      const x = 50 + i * 160 + r() * 50; ell(c, x, 113, 30, 3, '#4e3466');
+      for (let k = 0; k < 4; k++) palm(c, x - 18 + k * 12, 112, 14 + r() * 10, '#4e3466', r, true);
+      for (let y = 0; y < 18; y += 2) rect(c, x - 26 + Math.sin(y) * 2, 116 + y, 52 - y * 2, 1, '#5e4278');
+    }
+    const [mid, m] = mk(LW, H);
+    for (let i = 0; i < 3; i++) palm(m, 60 + i * 230 + r() * 60, 152, 46 + r() * 20, '#2a1c40', r, true);
+    for (let i = 0; i < 40; i++) { const x = r() * LW; line(m, x, 152, x + (r() - 0.5) * 4, 152 - 6 - r() * 10, '#2a1c40'); }
+    return { sky, layers: [{ c: cl, f: 0.02, drift: 0.8 }, { c: far, f: 0.04 }, { c: f2, f: 0.1 }, { c: mid, f: 0.22 }], mist: '#c890a8', ground: { top: '#3a2650', fill: '#1f1230', dark: '#150c22', speck: '#2c1a40', plat: '#5a3a26' }, motes: '#ffd0a0', water: '#5a3a7acc' };
+  },
+  caatinga() {
+    const r = seeded(51);
+    const [sky, s] = mk(W, H); bands(s, ['#a4a69c', '#b4b4a6', '#c4c0ae', '#d2ccb6', '#ddd4bc', '#e2d6bc', '#dccdb0'], 0, 150, W);
+    ell(s, 236, 52, 24, 24, '#e8e2cc'); ell(s, 236, 52, 17, 17, '#f6f0dc'); ell(s, 236, 52, 14, 14, '#fffaec');
+    const [cl, a] = mk(LW, H);
+    for (let i = 0; i < 8; i++) { const x = r() * LW, y = 16 + r() * 50, w2 = 40 + r() * 80; ell(a, x, y, w2 / 2 | 0, 2 + r() * 2 | 0, '#eee6d4'); }
+    const [far, b] = mk(LW, H);
+    for (let i = 0; i < 4; i++) mesa(b, 80 + i * 160 + r() * 40, 60 + r() * 50, 112 + r() * 8, 140, '#c8bea8', '#d2c8b2');
+    rect(b, 0, 136, LW, 44, '#c8bea8');
+    const [f2, c] = mk(LW, H);
+    for (let x = 0; x < LW; x++) { const h = 10 + Math.round((Math.sin(x / 47) * 5 + Math.sin(x / 19) * 2) / 2) * 2; rect(c, x, 146 - h, 1, h + 34, '#b4a488'); }
+    for (let i = 0; i < 8; i++) cactus(c, r() * LW, 144, 12 + r() * 8, '#8e8268');
+    const [mid, m] = mk(LW, H);
+    for (let i = 0; i < 5; i++) cactus(m, 40 + i * 130 + r() * 50, 150, 26 + r() * 16, '#5a5242');
+    for (let i = 0; i < 8; i++) { const x = r() * LW; branch(m, x, 150, -HPI / 2 + (r() - 0.5) * 0.4, 9 + r() * 6, 3, '#6a5a48', r); }
+    for (let i = 0; i < 4; i++) { const x = r() * LW; ell(m, x, 149, 3, 1, '#ece4d0'); rect(m, x + 3, 148, 3, 1, '#ece4d0'); }
+    ctx2fog(m, 130, 20, '#f0e4c4', 0.16);
+    return { sky, layers: [{ c: cl, f: 0.02, drift: 0.6 }, { c: far, f: 0.05 }, { c: f2, f: 0.1 }, { c: mid, f: 0.2 }], mist: '#f8e8c0', ground: { top: '#8a6448', fill: '#5a3e2e', dark: '#3e2a20', speck: '#6e4e3a', plat: '#4a3428' }, motes: '#fff0c0', hot: true };
+  },
+  mata() {
+    const r = seeded(61);
+    const [sky, s] = mk(W, H); bands(s, ['#5a6a76', '#687a86', '#788a94', '#8a9ca2', '#9aaaa8', '#a8b4ac', '#b2baaa'], 0, 150, W);
+    const [cl, a] = mk(LW, H);
+    for (let i = 0; i < 10; i++) { const x = r() * LW, y = 14 + r() * 50, w2 = 40 + r() * 80; ell(a, x, y, w2 / 2 | 0, 3 + r() * 3 | 0, '#8a9aa2'); ell(a, x - 4, y - 2, w2 / 2.6 | 0, 2, '#b4c0c0'); }
+    const [far, b] = mk(LW, H);
+    for (let x = 0; x < LW; x++) { const h = 22 + Math.sin(x / 60) * 8 + Math.sin(x / 23) * 3; rect(b, x, 140 - h, 1, h + 40, '#94a4a6'); }
+    for (let i = 0; i < 12; i++) araucaria(b, r() * LW, 122 - r() * 8, 22 + r() * 10, '#86989a', r);
+    const [f2, c] = mk(LW, H);
+    for (let i = 0; i < 10; i++) araucaria(c, r() * LW, 142, 34 + r() * 18, '#6c8082', r);
+    const rx = 300; rect(c, rx, 116, 40, 26, '#7a8c8c'); for (let k = 0; k < 3; k++) { ell(c, rx + 7 + k * 13, 124, 4, 5, '#9aaaa8'); rect(c, rx + 3 + k * 13, 124, 8, 18, '#9aaaa8'); } rect(c, rx - 2, 113, 44, 4, '#7a8c8c');
+    rect(c, 0, 140, LW, 40, '#6c8082');
+    ctx2fog(c, 118, 30, '#b4c0bc', 0.3);
+    const [mid, m] = mk(LW, H);
+    for (let i = 0; i < 4; i++) araucaria(m, 60 + i * 160 + r() * 40, 152, 56 + r() * 20, '#3e5252', r);
+    for (let i = 0; i < 3; i++) palm(m, 140 + i * 200 + r() * 40, 152, 40 + r() * 20, '#34484a', r, true);
+    for (let i = 0; i < 14; i++) fernSil(m, r() * LW, 152, 5 + r() * 4, '#34484a', r);
+    ctx2fog(m, 126, 26, '#b4c0bc', 0.2);
+    return { sky, layers: [{ c: cl, f: 0.02, drift: 1 }, { c: far, f: 0.04 }, { c: f2, f: 0.1 }, { c: mid, f: 0.2 }], mist: '#a4b4b0', ground: { top: '#2c5244', fill: '#1a342d', dark: '#10241f', speck: '#244438', plat: '#3d5560' }, motes: '#f0d890' };
+  },
+  coracao() {
+    const r = seeded(71);
+    const [sky, s] = mk(W, H); bands(s, ['#0c0a22', '#120e30', '#18163e', '#1c204c', '#1e2c5a', '#1e3a66', '#1e4670'], 0, 160, W);
+    for (let i = 0; i < 6; i++) { const x = 40 + r() * 240; for (let y = 0; y < 150; y++) if (hash(y + i * 50) < 0.5) rect(s, x + y * 0.15, y, 2, 1, '#2a5a8a'); }
+    const [far, b] = mk(LW, H);
+    for (let i = 0; i < 18; i++) { const x = r() * LW, w2 = 4 + r() * 5; rect(b, x, 10, w2, 150, '#22406a'); ell(b, x + w2 / 2, 14, 14 + r() * 10 | 0, 6, '#1e365e'); }
+    rect(b, 0, 132, LW, 48, '#1e365e');
+    const [f2, c] = mk(LW, H);
+    const tx = 320; rect(c, tx - 14, 20, 28, 130, '#2a2456'); for (let k = 0; k < 16; k++) rect(c, tx - 14 - k * 2.4, 150 - k * 2, 28 + k * 4.8, 2, '#2a2456');
+    ell(c, tx, 22, 70, 18, '#1e3860'); ell(c, tx - 40, 30, 36, 12, '#22406a'); ell(c, tx + 44, 28, 40, 12, '#22406a');
+    for (let k = 0; k < 7; k++) { const pts = curve(tx + (k - 3) * 4, 120 + k * 3, tx + (k - 3) * 30, 140, tx + (k - 3) * 52, 150, 30); for (const [px, py] of pts) rect(c, px, py, 2, 2, '#2e8a72'); }
+    for (let i = 0; i < 10; i++) { const x = r() * LW; rect(c, x, 20 + r() * 10, 3 + r() * 3, 130, '#241e4a'); }
+    const [mid, m] = mk(LW, H);
+    for (let i = 0; i < 26; i++) { const x = r() * LW, y = 148 - r() * 6, col = r() < 0.6 ? '#5af0c0' : '#e070c0'; rect(m, x, y - 4, 1, 4, '#3a3a6a'); ell(m, x, y - 5, 2 + (r() * 2 | 0), 1, col); }
+    for (let i = 0; i < 12; i++) fernSil(m, r() * LW, 152, 5 + r() * 4, '#1a2a4a', r);
+    for (let i = 0; i < 30; i++) rect(m, r() * LW, 40 + r() * 100, 1, 1, '#7af0e0');
+    return { sky, layers: [{ c: far, f: 0.04 }, { c: f2, f: 0.1 }, { c: mid, f: 0.22 }], mist: '#3ad0c0', ground: { top: '#2a5a5a', fill: '#141428', dark: '#0c0c1c', speck: '#22223e', plat: '#2a2a4a' }, motes: '#7af0e0' };
+  },
+};
+// névoa: faixa semitransparente que apaga a base das camadas distantes
+function ctx2fog(c, y, h, col, a) { for (let i = 0; i < h; i++) { c.globalAlpha = a * (i / h); c.fillStyle = col; c.fillRect(0, y + i, LW, 1); } c.globalAlpha = 1; }
+function fernSil(c, x, by, sz, col, r) { for (let i = 0; i < 5; i++) { const a = -HPI / 2 + (i - 2) * 0.45; line(c, x, by, x + Math.sin(a) * sz * 1.4, by - Math.cos(a) * sz, col); } }
+function acacia(c, x, by, h, col, hi, r) {
+  line(c, x, by, x + (r() - 0.5) * 6, by - h * 0.6, col, 2);
+  const tx = x + (r() - 0.5) * 6, ty = by - h * 0.6;
+  branch(c, tx, ty, -HPI / 2 - 0.6, h * 0.35, 2, col, r); branch(c, tx, ty, -HPI / 2 + 0.6, h * 0.35, 2, col, r);
+  ell(c, tx, by - h, h * 0.75 | 0, 4, col); ell(c, tx - 3, by - h - 2, h * 0.5 | 0, 2, hi);
+}
+function cactus(c, x, by, h, col) {
+  rect(c, x - 2, by - h, 4, h, col); rect(c, x - 7, by - h * 0.6, 5, 2, col); rect(c, x - 7, by - h * 0.85, 2, h * 0.27, col);
+  rect(c, x + 2, by - h * 0.5, 5, 2, col); rect(c, x + 5, by - h * 0.72, 2, h * 0.24, col);
+}
+function araucaria(c, x, by, h, col) {
+  // copa de taça: galhos que sobem e terminam em tufos, bordas mais altas que o meio
+  rect(c, x, by - h, 2, h, col);
+  const top = by - h, n = 7, span = h * 0.34;
+  for (let k = 0; k < n; k++) {
+    const ox = (k - (n - 1) / 2) / ((n - 1) / 2) * span, ty = top + 3 - Math.abs(ox) * 0.35;
+    for (const [px, py] of curve(x + 1, top + 9, x + 1 + ox * 0.6, top + 6, x + 1 + ox, ty, 10)) rect(c, px, py, 1, 1, col);
+    ell(c, x + 1 + ox, ty - 1, 3, 1, col);
+  }
+}
+
+function drawBackground(b, camx, t) {
+  ctx.drawImage(b.sky, 0, 0);
+  for (const l of b.layers) {
+    let ox = -Math.floor((camx * l.f + (l.drift ? t * l.drift : 0)) % LW);
+    if (ox > 0) ox -= LW;
+    for (let x = ox; x < W; x += LW) ctx.drawImage(l.c, x, 0);
+  }
+}
+
+// ---------- Personagens humanos (forma do espírito e povos) ----------
+const SK = { skin: '#8a5434', skinD: '#5e3622', foot: '#3a2014' };
+const SPEC = {
+  espirito: { skin: '#0c0a10', skinD: '#09070c', foot: '#09070c', hair: '#0c0a10', hairStyle: 'short', eye: '#ffe066', outline: '#6a5a8a', weapon: null },
+  zarabatana: { ...SK, hair: '#1a1210', hairStyle: 'short', acc: 'crown', top: { k: 'band', col: '#b8402e' }, neck: '#e8d8b8', bottom: { col: '#7a4a2a', len: 4, hem: '#a8744a' }, legBand: '#e8d8b8', back: 'bag', weapon: 'blowgun', eye: '#ffe066' },
+  arco: { ...SK, hair: '#14100e', hairStyle: 'long', acc: 'tuft', top: { k: 'cords', col: '#c8402e' }, bottom: { col: '#b8402e', len: 1, hem: '#e8d8b8' }, legBand: '#1a1210', back: 'quiver', weapon: 'bow', eye: '#ffe066', paint: '#1a1210' },
+  lanca: { ...SK, hair: '#e8e4dc', hairStyle: 'white', acc: 'plume', top: { k: 'sash', col: '#c8b48a' }, bottom: { col: '#7aaab0', len: 1, hem: '#5a8a90' }, back: 'bag', weapon: 'spear', eye: '#ffe066' },
+  cabaca: { ...SK, hair: '#14100e', hairStyle: 'braid', acc: 'fan', top: { k: 'sash', col: '#e8dcc0' }, bottom: { col: '#e8dcc0', len: 5, hem: '#b8402e' }, hip: 'gourd', weapon: 'spear', eye: '#ffe066' },
+  semente: { ...SK, hair: '#ece6dc', hairStyle: 'whitelong', acc: 'sprouts', top: { k: 'shirt', col: '#34446e', dots: '#f2e6a0' }, bottom: { col: '#e8e0cc', len: 6, hem: '#b8402e' }, back: 'basket', weapon: 'staff', eye: '#ffe066' },
+};
+function npcSpec(form, over) { return Object.assign({}, SPEC[form], { eye: '#20140e' }, over || {}); }
+
+// Esqueleto simples: braço = ombro→cotovelo→mão (ângulo 0 aponta para baixo, π/2 para a frente, π para cima),
+// perna = quadril→joelho→pé (o joelho dobra sozinho). As poses seguem as animações de referência
+// (correr, golpe por cima, varrida, estocada em avanço, puxar o arco, dor, queda).
+const HPI = Math.PI;
+function humanPose(a, s) {
+  const k = a.kind, p = clamp(a.p || 0, 0, 1), t = a.t || 0, wp = s.weapon;
+  const P = { bob: 0, lean: 0, head: 0, crouch: 0, fb: [-2, 0], ff: [2, 0], ab: [0.15, 0.2], af: [0.25, 0.9], wa: HPI - 0.1, slash: null, lie: false, blink: false, puff: false, draw: 0, arrow: false, gourd: false, noWeapon: false, mouth: false };
+  const ez = v => v * v * (3 - 2 * v);
+  if (k === 'idle') {
+    P.bob = Math.sin(t * 2.4) > 0.2 ? 0 : 1; P.ab = [0.12 + Math.sin(t * 2.4) * 0.05, 0.2]; P.blink = (t % 3.3) < 0.13;
+    if (wp === 'bow') { P.af = [0.15, 0.4]; P.wa = HPI / 2 + 0.25; }
+  } else if (k === 'run' || k === 'walk') {
+    const run = k === 'run', amp = run ? 4 : 2.5, lift = run ? 2.5 : 1, s1 = Math.sin(a.ph), c1 = Math.cos(a.ph);
+    P.ff = [1 + s1 * amp, Math.max(0, c1) * lift]; P.fb = [-2 - s1 * amp, Math.max(0, -c1) * lift];
+    P.bob = Math.abs(c1) > 0.7 ? 1 : 0; P.lean = run ? 1 : 0;
+    P.af = [-s1 * 0.8 + 0.3, 0.9]; P.ab = [s1 * 0.9, 0.7];
+    P.wa = wp === 'bow' ? HPI / 2 + 0.4 : 2.3 + s1 * 0.12;
+  } else if (k === 'jump') { P.ff = [3, 4]; P.fb = [-2, 2]; P.af = [2.2, 0.4]; P.ab = [-1.1, 0.3]; P.wa = 2.4; }
+  else if (k === 'fall') { P.ff = [2, 0]; P.fb = [-3, 1]; P.af = [1.8, 0.2]; P.ab = [-1.5, 0.2]; P.wa = 2.0; }
+  else if (k === 'climb') { const s1 = Math.sin(t * 9) * (a.moving ? 1 : 0); P.af = [HPI - 0.2 + s1 * 0.3, 0.2]; P.ab = [HPI - 0.4 - s1 * 0.3, 0.2]; P.ff = [2, 3 + s1 * 2]; P.fb = [-1, 3 - s1 * 2]; P.noWeapon = true; P.lean = 1; }
+  else if (k === 'kneel') { P.crouch = 5; P.ff = [4, 0]; P.fb = [-4, 0]; P.af = [0.4, 0.6]; P.ab = [0.1, 0.2]; P.head = 1; P.wa = 2.2; }
+  else if (k === 'heal') { P.af = [2.6, 2.3]; P.ab = [0.25, 0.3]; P.head = -1; P.gourd = true; P.noWeapon = wp !== 'bow'; P.wa = 0.3; }
+  else if (k === 'hurt') { P.lean = -2; P.head = -1; P.af = [1.9 - p, 0.3]; P.ab = [-1.6, 0.4]; P.ff = [3, 2]; P.fb = [-2, 0]; P.wa = 2.6; }
+  else if (k === 'dead') {
+    if (p < 0.45) { P.crouch = 5 * ez(p / 0.45); P.ff = [4, 0]; P.fb = [-4, 0]; P.af = [0.3, 0.2]; P.ab = [0.1, 0.1]; P.head = 1; P.wa = 1.4; }
+    else P.lie = true;
+  } else if (k === 'attack') {
+    const st = a.style || 'thrust';
+    const w = p < 0.3 ? ez(p / 0.3) : 1, sk = p < 0.3 ? 0 : p < 0.55 ? ez((p - 0.3) / 0.25) : 1;
+    if (st === 'over') {
+      const a1 = p < 0.3 ? lerp(0.9, HPI + 0.55, w) : lerp(HPI + 0.55, 0.55, sk);
+      P.af = [a1, 0.15]; P.wa = a1 + 0.1; P.lean = p < 0.3 ? -w : lerp(-1, 2, sk); P.ff = [1 + 3 * sk, 0]; P.ab = [-0.6 + sk, 0.4];
+      if (p >= 0.3) P.slash = { st, a0: HPI + 0.55, a1, r: wp ? 15 : 10 };
+    } else if (st === 'sweep' || st === 'claw') {
+      const a1 = p < 0.3 ? lerp(0.4, -1.4, w) : lerp(-1.4, 2.0, sk);
+      P.af = [a1, 0.1]; P.wa = a1; P.lean = p < 0.3 ? -w : lerp(0, 2, sk); P.ff = [1 + 2 * sk, 0]; P.ab = [0.6 - sk, 0.5];
+      if (p >= 0.3) P.slash = { st, a0: -1.4, a1, r: st === 'claw' ? 10 : 14 };
+      if (st === 'claw') P.noWeapon = true;
+    } else {
+      const jab = st === 'jab', reach = jab ? 0.6 : 1;
+      const bend = p < 0.3 ? lerp(0.6, 1.5, w) : lerp(1.5, 0, sk);
+      P.af = [lerp(0.7, HPI / 2, p < 0.3 ? 0 : sk), bend]; P.wa = HPI / 2;
+      P.lean = p < 0.3 ? -w : lerp(-1, 3 * reach, sk); P.ff = [2 + 4 * reach * sk, 0]; P.fb = [-2 - 2 * reach * sk, 0]; P.ab = [0.8, 0.9];
+      if (p >= 0.32 && p < 0.75) P.slash = { st: 'thrust', len: jab ? 10 : 16 };
+    }
+  } else if (k === 'shot' || k === 'special') {
+    const sh = a.shot || 'orb', rel = a.at || 0.28, w = p < rel ? ez(p / rel) : 1, after = p < rel ? 0 : ez(clamp((p - rel) / 0.3, 0, 1));
+    if (sh === 'arrow' || sh === 'firearrow') { P.af = [HPI / 2 + 0.05, 0]; P.ab = [HPI / 2 + 0.1, lerp(0.4, 2.5, w) * (1 - after)]; P.wa = HPI / 2; P.draw = p < rel ? w : 0; P.arrow = p < rel; P.lean = -after; }
+    else if (sh === 'dart' || sh === 'burst') { P.af = [2.0, 0.7]; P.ab = [2.1, 0.9]; P.wa = HPI / 2; P.mouth = true; P.puff = (p > rel - 0.05 && p < rel + 0.15) || (sh === 'burst' && Math.sin(p * 30) > 0.3); }
+    else if (sh === 'javelin' || sh === 'throw') { const a1 = p < rel ? lerp(1.0, HPI + 0.75, w) : lerp(HPI + 0.75, 1.2, after); P.af = [a1, 0.2]; P.wa = a1 + 0.15; P.lean = p < rel ? -w : 2 * after; P.ff = [2 + 2 * after, 0]; if (p >= rel) P.noWeapon = sh === 'throw'; }
+    else if (sh === 'drop' || sh === 'splash') { const a1 = p < rel ? lerp(0.2, -0.9, w) : lerp(-0.9, 2.2, after); P.af = [a1, 0.3]; P.gourd = true; P.noWeapon = true; P.lean = after; if (sh === 'splash' && p >= rel) P.slash = { st: 'sweep', a0: -0.9, a1, r: 12, water: true }; }
+    else if (sh === 'roots') { const a1 = p < rel ? lerp(0.9, HPI + 0.3, w) : lerp(HPI + 0.3, 0.2, after); P.af = [a1, 0.1]; P.wa = a1; P.crouch = 3 * after; P.lean = after; }
+    else if (sh === 'seed') { const a1 = p < rel ? lerp(0.6, HPI, w) : lerp(HPI, 1.7, after); P.af = [a1, 0.1]; P.wa = a1; P.lean = after; }
+    else { P.af = [HPI / 2, lerp(0.8, 0, w)]; P.ab = [0.4, 0.4]; P.lean = w; P.noWeapon = true; }
+  }
+  return P;
+}
+function drawHuman(c, x, y, f, a, s, flash, alpha) {
+  const R = [];
+  const A = (dx, dy, w, h, col) => R.push([dx, dy, w, h, col]);
+  const seg = (x0, y0, x1, y1, col, th) => { const n = Math.max(1, Math.round(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)))); for (let i = 0; i <= n; i++) A(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), th, th, col); };
+  const hair = s.hair, skin = s.skin, skinD = s.skinD;
+  let slash = null, shF = null, tip = 8;
+  if (a.kind === 'roll') {
+    const q = Math.floor((a.p || 0) * 10) % 4, pos = [[-5, -11], [0, -11], [0, -6], [-5, -6]][q];
+    A(-5, -11, 10, 10, skin); A(-5, -11, 10, 3, s.top ? s.top.col : skinD); A(pos[0], pos[1], 5, 5, hair);
+    if (s.bottom) A(-5, -4, 10, 2, s.bottom.col);
+  } else {
+    const P = humanPose(a, s);
+    if (P.lie) {
+      // caído de costas no chão
+      A(-12, -5, 6, 5, skin); A(-13, -6, 4, 5, hair); A(-6, -5, 9, 4, skin);
+      if (s.top) A(-6, -5, 9, 2, s.top.col);
+      if (s.bottom) A(2, -5, 4, 4, s.bottom.col);
+      A(5, -3, 8, 2, skin); A(5, -5, 7, 2, skinD); A(12, -4, 1, 3, s.foot); A(-8, -2, 6, 2, skinD);
+    } else {
+      const top = -22 + P.bob + P.crouch, hipY = -8 + P.crouch + P.bob * 0.5, Ln = P.lean;
+      const sh = (dx, row) => dx + Math.round(Ln * (1 - row / 8));
+      shF = [1 + Ln, top + 8];
+      const shB = [-2 + Ln, top + 8];
+      const arm = (sp, ang) => { const e = [sp[0] + Math.sin(ang[0]) * 4, sp[1] + Math.cos(ang[0]) * 4]; const b = ang[0] + ang[1]; return [e, [e[0] + Math.sin(b) * 4, e[1] + Math.cos(b) * 4]]; };
+      const leg = (hx, ft) => {
+        const fx = ft[0], fy = -ft[1], d = Math.hypot(fx - hx, fy - hipY) || 1;
+        let kx = (hx + fx) / 2, ky = (hipY + fy) / 2;
+        if (d < 8) { const hh = Math.sqrt(Math.max(0, 16 - (d / 2) ** 2)); kx += Math.abs(fy - hipY) / d * hh; ky -= (fx - hx) / d * hh * 0.4; }
+        return [[kx, ky], [fx, fy]];
+      };
+      const drawLeg = (hx, ft, col, band) => { const [kn, fo] = leg(hx, ft); seg(hx, hipY, kn[0], kn[1], col, 2); seg(kn[0], kn[1], fo[0], fo[1] - 1, col, 2); A(Math.round(fo[0]), Math.round(fo[1]) - 1, 3, 1, s.foot); if (band) A(Math.round((kn[0] + fo[0]) / 2), Math.round((kn[1] + fo[1]) / 2), 2, 1, band); };
+      // costas
+      if (s.back === 'bag') A(sh(-6, 2), top + 8, 3, 6, '#c8a46a');
+      if (s.back === 'quiver') { A(sh(-6, 0), top + 4, 2, 10, '#7a4a2a'); A(sh(-6, 0), top + 2, 1, 2, '#e8d8b8'); A(sh(-5, 0), top + 1, 1, 3, '#e8d8b8'); }
+      if (s.back === 'basket') { A(sh(-9, 1), top + 6, 5, 8, '#a88a5a'); A(sh(-9, 1), top + 8, 5, 1, '#7a5a3a'); A(sh(-8, 0), top + 3, 1, 3, '#6fd36a'); A(sh(-6, 0), top + 2, 1, 4, '#8fe37a'); }
+      const hx = -3 + Ln + P.head, hy = top + (P.head > 0 ? 1 : 0);
+      if (s.hairStyle === 'long') A(hx - 2, top + 2, 3, 13, hair);
+      if (s.hairStyle === 'whitelong') A(hx - 2, top + 2, 3, 16, hair);
+      if (s.hairStyle === 'braid') { A(hx - 2, top + 3, 2, 14, hair); A(hx - 2, top + 10, 2, 1, '#c8402e'); }
+      // braço e perna de trás
+      const [eB, hB] = arm(shB, P.ab);
+      seg(shB[0], shB[1], eB[0], eB[1], skinD, 2); seg(eB[0], eB[1], hB[0], hB[1], skinD, 2);
+      drawLeg(-2, P.fb, skinD, s.legBand);
+      // tronco (o alto acompanha a inclinação)
+      for (let r = 0; r < 8; r++) { A(sh(-3, r), top + 6 + r, 6, 1, skin); A(sh(-3, r), top + 6 + r, 1, 1, skinD); }
+      if (s.top) {
+        const T = s.top;
+        if (T.k === 'band') { A(sh(-3, 3), top + 9, 6, 2, T.col); A(sh(-2, 6), top + 12, 1, 1, '#f2c14e'); A(sh(1, 6), top + 12, 1, 1, '#c8402e'); }
+        if (T.k === 'cords') { A(sh(-3, 2), top + 8, 6, 1, T.col); A(sh(-3, 5), top + 11, 6, 1, T.col); A(sh(-3, 3), top + 9, 6, 1, '#1a1210'); }
+        if (T.k === 'sash') for (let i = 0; i < 6; i++) A(sh(-3 + i, i), top + 6 + i, 1, 2, T.col);
+        if (T.k === 'shirt') { for (let r = 0; r < 7; r++) A(sh(-3, r), top + 6 + r, 6, 1, T.col); if (T.dots) { A(sh(-1, 2), top + 8, 1, 1, T.dots); A(sh(1, 4), top + 10, 1, 1, T.dots); } }
+      }
+      if (s.neck) A(sh(-2, 1), top + 7, 4, 1, s.neck);
+      // perna da frente e saia
+      drawLeg(1, P.ff, skin, s.legBand);
+      if (s.bottom) { const B = s.bottom; A(-3, top + 13, 7, 3 + B.len, B.col); A(-3, top + 15 + B.len, 7, 1, B.hem); }
+      if (s.hip === 'gourd' && !P.gourd) { A(-5, top + 13, 3, 4, '#d8b04a'); A(-4, top + 12, 1, 1, '#7a5a2a'); }
+      // cabeça
+      A(hx, hy, 6, 6, skin); A(hx + 6, hy + 2, 1, 2, skin);
+      if (s.paint) A(hx + 4, hy + 4, 2, 1, s.paint);
+      if (!P.blink) A(hx + 4, hy + 2, 2, 1, s.eye); else A(hx + 4, hy + 3, 2, 1, skinD);
+      if (P.puff) A(hx + 5, hy + 4, 2, 2, skin);
+      if (s.hairStyle === 'white') { A(hx - 1, hy - 1, 7, 3, hair); A(hx - 1, hy + 2, 2, 3, hair); A(hx + 4, hy + 4, 3, 3, hair); }
+      else { A(hx - 1, hy - 1, 7, 3, hair); A(hx - 1, hy + 2, 2, 3, hair); A(hx + 5, hy, 2, 1, hair); }
+      const ax = hx + 3, ay = hy;
+      if (s.acc === 'crown') { for (let i = 0; i < 7; i++) A(ax - 3 + i, ay - 3 - (i % 2), 1, 3 + (i % 2), i % 2 ? '#f2c14e' : '#e0703a'); A(ax - 3, ay, 7, 1, '#c8402e'); }
+      if (s.acc === 'tuft') { A(ax - 7, ay - 1, 4, 1, '#efe8dc'); A(ax - 8, ay, 4, 1, '#c8402e'); A(ax - 6, ay + 1, 2, 1, '#efe8dc'); }
+      if (s.acc === 'plume') { A(ax - 1, ay - 5, 1, 4, '#f4f0e8'); A(ax, ay - 7, 1, 4, '#f4f0e8'); A(ax - 2, ay - 4, 1, 2, '#d8d4cc'); }
+      if (s.acc === 'fan') { for (let i = -3; i <= 3; i++) A(ax + i, ay - 4 + (Math.abs(i) >> 1), 1, 3, i % 2 ? '#b8b0a0' : '#d8d0c0'); A(ax - 4, ay + 1, 8, 1, '#c8402e'); }
+      if (s.acc === 'sprouts') { A(ax - 2, ay - 4, 1, 4, '#6fd36a'); A(ax, ay - 5, 1, 5, '#8fe37a'); A(ax + 2, ay - 3, 1, 3, '#6fd36a'); A(ax - 3, ay, 7, 1, '#c8402e'); }
+      // arma na mão da frente, depois o braço por cima
+      const [eF, hF0] = arm(shF, P.af);
+      const hF = P.mouth ? [hx + 6, hy + 4] : hF0;
+      const d = [Math.sin(P.wa), Math.cos(P.wa)], wood = '#8a6a3a', metal = '#d8d8d0';
+      if (s.weapon && !P.noWeapon) {
+        if (s.weapon === 'spear') { seg(hF[0] - d[0] * 8, hF[1] - d[1] * 8, hF[0] + d[0] * 19, hF[1] + d[1] * 19, wood, 1); const tx = Math.round(hF[0] + d[0] * 21), ty = Math.round(hF[1] + d[1] * 21); A(tx - 1, ty - 1, 3, 3, metal); A(Math.round(hF[0] + d[0] * 23), Math.round(hF[1] + d[1] * 23), 1, 1, metal); }
+        if (s.weapon === 'staff') { seg(hF[0] - d[0] * 9, hF[1] - d[1] * 9, hF[0] + d[0] * 14, hF[1] + d[1] * 14, wood, 1); A(Math.round(hF[0] + d[0] * 15) - 1, Math.round(hF[1] + d[1] * 15) - 1, 3, 3, '#a87a4a'); }
+        if (s.weapon === 'pick' || s.weapon === 'axe') {
+          const tc = s.toolCol || '#c8ccd4', ex = hF[0] + d[0] * 9, ey = hF[1] + d[1] * 9, n = [Math.cos(P.wa), -Math.sin(P.wa)];
+          seg(hF[0] - d[0] * 2, hF[1] - d[1] * 2, ex, ey, wood, 1);
+          if (s.weapon === 'pick') seg(ex - n[0] * 5 - d[0] * 2, ey - n[1] * 5 - d[1] * 2, ex + n[0] * 5 - d[0] * 2, ey + n[1] * 5 - d[1] * 2, tc, 2);
+          else A(Math.round(ex + n[0]) - 1, Math.round(ey + n[1]) - 2, 3, 4, tc);
+        }
+        if (s.weapon === 'blowgun') { const b = P.mouth ? 1 : 4; seg(hF[0] - d[0] * b, hF[1] - d[1] * b, hF[0] + d[0] * 16, hF[1] + d[1] * 16, wood, 1); }
+        if (s.weapon === 'bow') {
+          const n = [Math.cos(P.wa), -Math.sin(P.wa)];
+          for (let k = -8; k <= 8; k++) { const bulge = 2.2 * (1 - (k / 8) ** 2); A(Math.round(hF[0] + n[0] * k + d[0] * bulge), Math.round(hF[1] + n[1] * k + d[1] * bulge), 1, 1, '#c8a46a'); }
+          const nock = [hF[0] - d[0] * (1 + P.draw * 6), hF[1] - d[1] * (1 + P.draw * 6)];
+          seg(hF[0] + n[0] * 8, hF[1] + n[1] * 8, nock[0], nock[1], '#e8d8b8', 1); seg(nock[0], nock[1], hF[0] - n[0] * 8, hF[1] - n[1] * 8, '#e8d8b8', 1);
+          if (P.arrow) { seg(nock[0], nock[1], hF[0] + d[0] * 5, hF[1] + d[1] * 5, '#efe0c0', 1); A(Math.round(nock[0]), Math.round(nock[1]), 1, 1, '#c8402e'); }
+        }
+      }
+      if (P.gourd) { A(Math.round(hF[0]) - 1, Math.round(hF[1]) - 2, 3, 4, '#d8b04a'); A(Math.round(hF[0]), Math.round(hF[1]) - 3, 1, 1, '#7a5a2a'); }
+      seg(shF[0], shF[1], eF[0], eF[1], skin, 2); seg(eF[0], eF[1], hF[0], hF[1], skin, 2);
+      slash = P.slash; tip = s.weapon === 'spear' ? 22 : s.weapon === 'staff' ? 15 : 8;
+    }
+  }
+  if (alpha !== undefined) c.globalAlpha = alpha;
+  c.fillStyle = s.outline || '#120a08';
+  for (const q of R) { const sx = f > 0 ? x + q[0] : x - q[0] - q[2]; c.fillRect(Math.round(sx) - 1, Math.round(y + q[1]) - 1, q[2] + 2, q[3] + 2); }
+  for (const q of R) { const sx = f > 0 ? x + q[0] : x - q[0] - q[2]; c.fillStyle = flash ? '#ffffff' : q[4]; c.fillRect(Math.round(sx), Math.round(y + q[1]), q[2], q[3]); }
+  if (slash) drawSlash(c, x, y, f, slash, shF, tip, s);
+  if (alpha !== undefined) c.globalAlpha = 1;
+}
+// Rastro do golpe (o arco claro das animações de ataque)
+function drawSlash(c, x, y, f, S, sh, tip, s) {
+  const ox = x + f * sh[0], oy = y + sh[1], base = c.globalAlpha, esp = s.skin === SPEC.espirito.skin;
+  const main = S.water ? '#bfe4f0' : esp ? '#c8b8f0' : '#e4f2f8', edge = S.water ? '#5a9ab8' : esp ? '#7a6ab0' : '#7aa8c0';
+  if (S.st === 'thrust') {
+    for (let i = 0; i < 3; i++) { c.globalAlpha = base * (0.8 - i * 0.2); c.fillStyle = i ? edge : main; const L2 = S.len - i * 3; c.fillRect(Math.round(f > 0 ? ox + 6 + i * 3 : ox - 6 - i * 3 - L2), Math.round(oy + 1 + (i - 1) * 3), L2, 1); }
+    c.globalAlpha = base; return;
+  }
+  const r = S.r + tip * 0.3, n = 14, rings = S.st === 'claw' ? [r - 4, r - 2, r] : [r - 2, r - 1, r];
+  for (let i = 0; i <= n; i++) {
+    const ang = lerp(S.a0, S.a1, i / n), fade = i / n;
+    rings.forEach((rr, j) => {
+      if (S.st !== 'claw' && j === 0 && (i < 3 || i > n - 3)) return;
+      c.globalAlpha = base * fade * (S.st === 'claw' ? 0.8 : j === 2 ? 0.9 : 0.6);
+      c.fillStyle = j === 2 ? main : edge;
+      c.fillRect(Math.round(ox + f * Math.sin(ang) * rr), Math.round(oy + Math.cos(ang) * rr), 2, 2);
+    });
+  }
+  c.globalAlpha = base;
+}
+
+// Criança (epílogo) e ancião sentado
+function drawChild(c, x, y, f) {
+  const P = (dx, dy, w, h, col) => { c.fillStyle = col; c.fillRect(f > 0 ? x + dx : x - dx - w, y + dy, w, h); };
+  P(-3, -15, 6, 16, '#120a08'); P(-2, -14, 4, 4, '#8a5434'); P(-3, -15, 5, 2, '#1a1210'); P(0, -12, 1, 1, '#20140e'); P(-2, -10, 4, 5, '#8a5434'); P(-2, -6, 4, 2, '#c8402e'); P(-2, -4, 1, 4, '#5e3622'); P(1, -4, 1, 4, '#8a5434');
+}
+
+// Silhueta genérica de "sombra do esquecimento" (inimigos comuns)
+function pen(c, x, y, f, flash) {
+  return (dx, dy, w, h, col) => { c.fillStyle = flash ? '#fff' : col; c.fillRect(Math.round(f > 0 ? x + dx : x - dx - w), Math.round(y + dy), w, h); };
+}
+const SHADE = '#0d0a10', SHADE2 = '#1c1622';
+function drawEnemy(c, e, x, y, t, eye) {
+  if (drawFauna(c, e, x, y, t)) return;
+  if (drawCaveEnemy(c, e, x, y, t)) return;
+  const f = e.f, P = pen(c, x, y, f, e.flash > 0), k = e.type;
+  if (k === 'crawler') {
+    const lg = Math.sin(t * 14) > 0 ? 1 : 0;
+    P(-7, -8, 14, 6, SHADE); P(-5, -10, 9, 3, SHADE); P(4, -7, 4, 4, SHADE2);
+    P(-6, -2, 1, 2 + lg, SHADE); P(-2, -2, 1, 2 - lg + 1, SHADE); P(2, -2, 1, 2 + lg, SHADE); P(5, -2, 1, 2 - lg + 1, SHADE);
+    P(6, -6, 1, 1, eye); P(4, -6, 1, 1, eye);
+  } else if (k === 'flyer') {
+    const w = Math.sin(t * (e.mode === 'tired' ? 8 : 18)) > 0, warn = e.wind > 0 && Math.sin(t * 40) > 0;
+    P(-4, -9, 8, 7, SHADE); P(-3, -11, 2, 2, SHADE); P(2, -11, 2, 2, SHADE);
+    P(1, -7, 2, 1, warn ? '#ffffff' : eye); P(-2, -7, 1, 1, warn ? '#ffffff' : eye);
+    if (w) { P(-11, -11, 7, 2, SHADE); P(4, -11, 7, 2, SHADE); P(-12, -9, 2, 2, SHADE); P(10, -9, 2, 2, SHADE); }
+    else { P(-10, -6, 6, 2, SHADE); P(4, -6, 6, 2, SHADE); P(-11, -4, 2, 2, SHADE); P(9, -4, 2, 2, SHADE); }
+  } else if (k === 'spitter') {
+    const open = e.wind > 0;
+    P(-5, -14, 10, 14, SHADE); P(-6, -4, 12, 4, SHADE2); P(-4, -16, 3, 2, SHADE); P(1, -17, 3, 3, SHADE);
+    P(1, -11, 2, 1, eye); P(-2, -11, 1, 1, eye);
+    if (open) { P(2, -8, 4, 3, '#000'); P(3, -7, 2, 1, eye); }
+  } else if (k === 'brute') {
+    const sw = e.wind > 0 ? -4 : e.swing > 0 ? 8 : 0;
+    P(-8, -20, 15, 16, SHADE); P(-6, -24, 10, 6, SHADE); P(-7, -4, 4, 4, SHADE); P(2, -4, 4, 4, SHADE);
+    P(2, -21, 2, 1, eye); P(-1, -21, 1, 1, eye);
+    P(5, -18 + (sw < 0 ? -6 : 0), 4, 10, SHADE2); P(7 + Math.max(0, sw), -10 + (sw < 0 ? -10 : 0), 5, 4, SHADE);
+    if (e.swing > 0) enemySlash(c, x, y - 12, f, 16);
+  } else if (k === 'lanceiro') {
+    // sombra alta com lança: recua a lança no aviso e estoca no ataque
+    const step = Math.abs(e.vx) > 4 && Math.sin(t * 12) > 0 ? 1 : 0, back = e.wind > 0 ? -6 : 0, thr = e.swing > 0 ? 12 : 0;
+    P(-4, -22, 8, 16, SHADE); P(-3, -26, 6, 5, SHADE); P(-4, -6, 3, 6 - step, SHADE); P(1, -6, 3, 5 + step, SHADE);
+    P(1, -24, 2, 1, eye); P(-1, -24, 1, 1, eye);
+    P(-10 + back + thr, -15, 30, 1, '#2a2230'); P(19 + back + thr, -16, 3, 3, eye);
+    P(2 + Math.round((back + thr) / 2), -16, 4, 3, SHADE2);
+    if (e.swing > 0) { c.globalAlpha = 0.6; P(22 + thr, -17, 10, 1, '#8a2a2a'); P(22 + thr, -14, 8, 1, '#8a2a2a'); c.globalAlpha = 1; }
+  } else if (k === 'wolf') { // guardião menor (prólogo)
+    const run = Math.sin(t * 16) > 0 ? 1 : 0;
+    P(-12, -12, 20, 8, SHADE); P(6, -15, 7, 7, SHADE); P(12, -12, 4, 3, SHADE); P(-15, -14, 4, 2, SHADE); P(-17, -16, 3, 2, SHADE);
+    P(-10, -4, 2, 4 - run, SHADE); P(-6, -4, 2, 3 + run, SHADE); P(2, -4, 2, 4 - run, SHADE); P(5, -4, 2, 3 + run, SHADE);
+    P(10, -13, 2, 1, eye); P(7, -16, 1, 2, SHADE); P(10, -17, 1, 2, SHADE);
+    for (let i = 0; i < 4; i++) P(-12 + i * 5, -14 - (i % 2), 2, 2, SHADE2);
+  }
+}
+
+function enemySlash(c, x, y, f, r) {
+  for (let i = 0; i <= 10; i++) { const ang = lerp(HPI + 0.4, 0.4, i / 10); c.globalAlpha = 0.25 + i / 16; c.fillStyle = i > 6 ? '#c8402e' : '#5a1a1a'; c.fillRect(Math.round(x + f * Math.sin(ang) * r), Math.round(y + Math.cos(ang) * r), 2, 2); }
+  c.globalAlpha = 1;
+}
+
+// Fogueira de histórias (ponto de descanso)
+function drawFire(c, x, y, t, lit) {
+  // luz no chão (só acesa), roda de pedras, lenha cruzada, chama em camadas, fagulhas e fumaça
+  if (lit) { const k = 0.16 + Math.sin(t * 7) * 0.03 + Math.sin(t * 13) * 0.02; c.globalAlpha = k; ell(c, x, y - 8, 28, 18, '#ffb050'); c.globalAlpha = k * 1.4; ell(c, x, y - 1, 20, 3, '#ffc070'); c.globalAlpha = 1; }
+  const stones = [[-10, 0], [-7, 1], [-3, 1], [2, 1], [6, 1], [9, 0]];
+  for (const [sx, sy] of stones) { rect(c, x + sx - 2, y - 3 + sy, 4, 3, '#120a06'); rect(c, x + sx - 1, y - 2 + sy, 3, 2, '#6a6a62'); rect(c, x + sx - 1, y - 2 + sy, 2, 1, '#8a8a80'); }
+  line(c, x - 7, y - 1, x + 5, y - 5, '#120a06', 3); line(c, x - 6, y - 2, x + 4, y - 5, '#6a4428', 2);
+  line(c, x + 7, y - 1, x - 5, y - 5, '#120a06', 3); line(c, x + 6, y - 2, x - 4, y - 5, '#7a5230', 2);
+  rect(c, x - 2, y - 3, 4, 2, '#3a2014');
+  if (!lit) {
+    for (let i = 0; i < 6; i++) rect(c, x - 5 + i * 2, y - 4 - (i % 2), 2, 1, Math.sin(t * 3 + i * 1.7) > 0.3 ? '#c8402e' : '#5a2a1a');
+    if (Math.random() < 0.05) part(x + rnd(-3, 3), y - 5, rnd(-3, 3), -12, 1.6, '#5a5050', 2, -5);
+    return;
+  }
+  const flick = i => Math.abs(Math.sin(t * 8 + i * 1.9)) * 0.6 + Math.abs(Math.sin(t * 13 + i)) * 0.4;
+  for (let i = 0; i < 7; i++) { const fx = x - 6 + i * 2, h = (9 - Math.abs(i - 3) * 2.2) * (0.7 + flick(i) * 0.6); rect(c, fx, y - 4 - h, 2, h, '#c8402e'); }
+  for (let i = 0; i < 5; i++) { const fx = x - 4 + i * 2, h = (7 - Math.abs(i - 2) * 2) * (0.7 + flick(i + 3) * 0.6); rect(c, fx, y - 4 - h, 2, h, '#f08a3a'); }
+  for (let i = 0; i < 3; i++) { const fx = x - 2 + i * 2, h = (4.5 - Math.abs(i - 1) * 1.6) * (0.7 + flick(i + 7) * 0.6); rect(c, fx, y - 4 - h, 2, h, '#ffd27a'); }
+  rect(c, x - 1, y - 6, 2, 2, '#fff4d0');
+  if (Math.random() < 0.3) part(x + rnd(-4, 4), y - 10, rnd(-8, 8), rnd(-45, -20), rnd(0.6, 1.1), pick(['#ffb050', '#ffd27a', '#ff7a3a']), 1, -10);
+  if (Math.random() < 0.08) part(x + rnd(-2, 2), y - 16, rnd(-4, 4), -14, 2, '#5a5050', 2, -3);
+}
+// chama-espírito (memória perdida, eco): gota de luz que tremula, com fagulhas girando em volta
+function drawSparkle(c, x, y, t, col) {
+  const a0 = c.globalAlpha, k = (Math.sin(t * 3) + 1) / 2, sway = Math.sin(t * 7) * 1.2;
+  c.globalAlpha = a0 * (0.14 + k * 0.1); ell(c, x, y - 2, 6 + k * 2 | 0, 8 + k * 2 | 0, col);
+  const rows = [1, 1, 2, 2, 3, 3, 4, 4, 4, 3];
+  c.globalAlpha = a0 * 0.9;
+  rows.forEach((w, i) => { const ox = Math.round(sway * (1 - i / rows.length)) - (w >> 1); rect(c, x + ox, y - 8 + i, w, 1, col); });
+  rows.forEach((w, i) => { if (i < 4 || i > 8) return; const ox = Math.round(sway * (1 - i / rows.length)) - (w >> 1) + 1; rect(c, x + ox, y - 8 + i, Math.max(1, w - 2), 1, '#fff'); });
+  for (let i = 0; i < 3; i++) { const a = t * 2.2 + i * 2.1, front = Math.sin(a) > 0; c.globalAlpha = a0 * (front ? 0.9 : 0.4); rect(c, x + Math.round(Math.cos(a) * 8), y - 3 + Math.round(Math.sin(a) * 2), 1, 1, front ? '#fff' : col); }
+  c.globalAlpha = a0;
+}

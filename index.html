@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d0b10">
+<title>A Terra que Rejeitou</title>
+<meta name="description" content="Soulslike de plataforma 2D em pixel art: o Espírito da Mata assume a forma dos povos de cada bioma para libertar os guardiões das lendas brasileiras.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0b10; --ink:#120a08; --cream:#efe0c0; --mut:#a89a86; --gold:#f2c14e; --ember:#e0703a; --red:#c8402e;
+  --green:#6fbf73; --blue:#7fb6c9; --panel:#17131add; --line:#3a2f2a;
+  --f:'Pixelify Sans',system-ui,sans-serif;
+  --fs:13px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--cream);font-family:var(--f);user-select:none;-webkit-user-select:none;touch-action:none}
+button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none;font-size:inherit}
+[hidden]{display:none!important}
+
+#stage{position:fixed;left:0;top:0;width:320px;height:180px;font-size:var(--fs);overflow:hidden;background:#000}
+#cv{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
+
+/* ---------- HUD ---------- */
+#hud{position:absolute;left:1.6%;top:3%;display:flex;flex-direction:column;gap:.3em;pointer-events:none;width:38%}
+.bar{position:relative;height:.62em;background:#0008;border:2px solid var(--ink);box-shadow:0 0 0 1px #ffffff1a}
+.bar i{position:absolute;left:0;top:0;bottom:0;width:100%;transition:width .12s}
+.bar b{position:absolute;left:0;top:0;bottom:0;width:100%;background:#fff6;transition:width .5s .25s}
+.bar.hp i{background:linear-gradient(#d85a3c,#9c2f22)}
+.bar.st{height:.45em;width:80%}
+.bar.st i{background:linear-gradient(#9fd18a,#4f8f4a)}
+.bar.heat{height:.45em;width:80%}
+.bar.heat i{background:linear-gradient(#ffd27a,#e0703a)}
+.bar.breath{height:.45em;width:80%}
+.bar.breath i{background:linear-gradient(#bfe8f8,#5aa8d0)}
+.bar.heat.hot i{background:linear-gradient(#ff8a5a,#c8402e);animation:pulse .4s infinite alternate}
+@keyframes pulse{to{opacity:.55}}
+.hrow{display:flex;align-items:center;gap:.6em;font-size:.85em;text-shadow:1px 1px 0 #000}
+#flasks{display:flex;gap:2px}
+#flasks i{width:.55em;height:.75em;border-radius:45% 45% 50% 50%;background:var(--gold);border:1px solid var(--ink);display:block}
+#flasks i.off{background:#3a3226}
+#mem{color:#f6e3a6}
+#formName{color:var(--mut);font-size:.85em;white-space:nowrap}
+#bossbar{position:absolute;left:15%;right:15%;bottom:5%;text-align:center;pointer-events:none}
+#bossbar .nm{font-size:.9em;letter-spacing:.08em;text-shadow:1px 1px 0 #000;margin-bottom:.2em}
+#bossbar .bar{height:.55em}
+#bossbar .bar i{background:linear-gradient(#b8a26a,#7a5a2a)}
+#toast{position:absolute;left:0;right:0;top:26%;text-align:center;pointer-events:none;opacity:0;transition:opacity .6s}
+#toast.on{opacity:1}
+#toast .big{font-size:2.1em;font-weight:700;letter-spacing:.06em;text-shadow:2px 2px 0 #000;color:var(--cream)}
+#toast .sm{font-size:.95em;color:var(--mut);text-shadow:1px 1px 0 #000;margin-top:.2em}
+#hint{position:absolute;left:50%;top:20%;transform:translateX(-50%);background:var(--panel);border:2px solid var(--line);padding:.35em .7em;font-size:.85em;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .4s}
+#hint.on{opacity:1}
+#hint kbd{background:#2a2420;border:1px solid #54463c;border-radius:3px;padding:0 .3em;font-family:inherit;color:var(--gold)}
+#prompt{position:absolute;font-size:.8em;background:var(--panel);border:1px solid var(--line);padding:.1em .45em;transform:translate(-50%,-100%);pointer-events:none;white-space:nowrap;color:var(--gold)}
+#float{position:absolute;inset:0;pointer-events:none}
+#float span{position:absolute;font-size:.75em;color:#f6e3a6;text-shadow:1px 1px 0 #000;transform:translate(-50%,0);animation:up 1s forwards}
+@keyframes up{to{transform:translate(-50%,-1.6em);opacity:0}}
+#fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .8s}
+#fade.on{opacity:1}
+#fade.white{background:#f4ecd8}
+
+/* ---------- Diálogo ---------- */
+#dialog{position:fixed;z-index:20;background:#120e12f2;border:2px solid #4a3c30;box-shadow:0 0 0 2px #000,0 6px 20px #000a;padding:.7em .9em .8em;font-size:15px;line-height:1.4;min-height:4.6em}
+#dialog .who{color:var(--gold);font-weight:700;font-size:.85em;letter-spacing:.05em;margin-bottom:.15em}
+#dialog .who:empty{display:none}
+#dialog .txt{min-height:2.6em}
+#dialog .txt.narr{color:#d8ccb4;font-style:italic}
+#dialog .nx{position:absolute;right:.6em;bottom:.3em;color:var(--gold);animation:bob .6s infinite alternate;font-size:.8em}
+@keyframes bob{to{transform:translateY(3px)}}
+#dialog .choices{display:flex;flex-direction:column;gap:.4em;margin-top:.6em}
+#dialog .choices button{text-align:left;padding:.5em .7em;background:#241c1a;border:2px solid #4a3c30;line-height:1.25}
+#dialog .choices button.sel,#dialog .choices button:hover{border-color:var(--gold);background:#33261e}
+#dialog .choices button small{display:block;color:var(--mut);font-size:.8em}
+#dialog .choices button[disabled]{opacity:.4;cursor:default}
+
+/* ---------- Telas ---------- */
+.screen{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;touch-action:pan-y}
+.screen.dim{background:#0d0b10cc}
+.panel{background:#120e12f4;border:2px solid #4a3c30;box-shadow:0 0 0 2px #000,0 10px 40px #000c;padding:20px;max-width:520px;width:100%;max-height:100%;overflow-y:auto}
+.panel h2{font-size:22px;margin-bottom:10px;color:var(--gold)}
+.panel p{color:#d8ccb4;line-height:1.45;margin-bottom:10px;font-size:15px}
+.btns{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.btn{padding:11px 14px;background:#241c1a;border:2px solid #4a3c30;font-size:16px;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.btn:hover,.btn:focus-visible,.btn.sel{border-color:var(--gold);outline:none;background:#33261e}
+.btn small{color:var(--mut);font-size:13px}
+.btn[disabled]{opacity:.45;cursor:default}
+
+#title{background:linear-gradient(#0d0b1000,#0d0b10ee 70%);align-items:flex-end;padding-bottom:max(24px,env(safe-area-inset-bottom))}
+#title .wrap{max-width:460px;width:100%;text-align:center}
+#title h1{font-size:clamp(34px,8vw,58px);line-height:1;letter-spacing:.02em;color:var(--cream);text-shadow:3px 3px 0 #000,0 0 30px #e0703a55}
+#title .sub{color:var(--mut);margin:8px 0 18px;font-size:15px}
+#title .btns{max-width:300px;margin:0 auto}
+#title .btn{justify-content:center}
+#title .note{color:#7d7266;font-size:12px;margin-top:16px;line-height:1.4}
+
+#card{background:#000;flex-direction:column;text-align:center;cursor:pointer}
+#card .k{color:var(--mut);letter-spacing:.2em;font-size:14px;text-transform:uppercase}
+#card .t{font-size:clamp(30px,7vw,52px);margin:6px 0 4px;color:var(--cream);text-shadow:0 0 24px #e0703a44}
+#card .s{color:var(--gold);font-size:17px}
+#card .l{color:#cfc2a8;max-width:520px;margin:22px auto 0;line-height:1.55;font-size:16px;min-height:5em}
+#card .go{margin-top:28px;color:var(--mut);font-size:13px;animation:pulse 1s infinite alternate}
+
+.stats{display:grid;grid-template-columns:1fr auto;gap:6px 12px;margin:6px 0 4px;font-size:15px}
+.stats .v{color:var(--gold)}
+.journal{display:flex;flex-direction:column;gap:10px}
+.journal .e{border-left:3px solid #4a3c30;padding:2px 0 2px 10px}
+.journal .e b{color:var(--gold);display:block;margin-bottom:2px}
+.journal .e span{color:#d8ccb4;font-size:14px;line-height:1.4}
+.journal .e.no b{color:#6a5e52}
+.relics{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.relic{display:flex;gap:10px;align-items:center;background:#241c1a;border:2px solid #4a3c30;padding:6px 8px}
+.relic img{width:28px;height:28px;image-rendering:pixelated}
+.relic b{display:block;color:var(--gold);font-weight:600}
+.relic small{color:#d8ccb4;font-size:13px}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:15px}
+.keys kbd{background:#2a2420;border:1px solid #54463c;border-radius:3px;padding:1px 6px;font-family:inherit;color:var(--gold);white-space:nowrap}
+
+#dead{background:radial-gradient(#00000088,#000e);flex-direction:column;pointer-events:none;opacity:0;transition:opacity 1s}
+#dead.on{opacity:1}
+#dead div{font-size:clamp(26px,6vw,44px);color:#c8b48a;letter-spacing:.12em;text-shadow:0 0 20px #000}
+#dead small{color:var(--mut);margin-top:8px;font-size:14px}
+
+#hotbar{position:absolute;left:50%;bottom:2%;transform:translateX(-50%);display:flex;gap:2px}
+#hotbar button{position:relative;width:2.1em;height:2.1em;background:#120e12cc;border:2px solid #3a2f2a;padding:0}
+#hotbar button.sel{border-color:var(--gold);background:#33261ecc}
+#hotbar img{width:80%;height:80%;image-rendering:pixelated}
+#hotbar b{position:absolute;right:1px;bottom:0;font-size:.6em;text-shadow:1px 1px 0 #000}
+#hotbar i{position:absolute;left:2px;top:0;font-size:.5em;font-style:normal;color:var(--mut)}
+.inv{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.inv .slot{position:relative;aspect-ratio:1;background:#241c1a;border:2px solid #4a3c30;padding:0}
+.inv .slot.sel2{border-color:var(--gold)}
+.inv .slot img{width:70%;height:70%;image-rendering:pixelated}
+.inv .slot b{position:absolute;right:2px;bottom:0;font-size:12px}
+.btn.rec span{display:flex;flex-direction:column;gap:2px}
+.btn.rec img{width:18px;height:18px;image-rendering:pixelated;vertical-align:middle}
+.btn.rec .ok{color:#9fd18a}.btn.rec .no{color:#c87a6a}
+#rotate{position:fixed;left:0;right:0;z-index:5;text-align:center;color:#6a5e52;font-size:12px;pointer-events:none}
+
+/* ---------- Controles de toque ---------- */
+#touch{position:fixed;left:0;right:0;bottom:0;z-index:10;pointer-events:none;padding:0 max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));display:flex;justify-content:space-between;align-items:flex-end}
+#touch .grp{display:flex;gap:8px;pointer-events:none;align-items:flex-end}
+#touch button{pointer-events:auto;touch-action:none;width:62px;height:62px;border-radius:50%;background:#1d1716b8;border:2px solid #ffffff30;color:#efe0c0d0;font-size:13px;font-weight:600;line-height:1.05;box-shadow:0 3px 0 #0008}
+#touch button.on{background:#4a3828d8;border-color:#f2c14e;transform:translateY(2px)}
+#touch .dpad{flex-direction:column;align-items:flex-start;gap:8px}
+#touch .dpad .row{display:flex;gap:8px}
+#touch .dpad button{width:64px;height:64px;font-size:24px;border-radius:16px}
+#touch .dpad .sm{width:50px;height:44px;font-size:12px;border-radius:12px}
+#touch .acts{display:grid;grid-template-columns:repeat(3,auto);gap:8px;align-items:end}
+#touch .acts .big{width:72px;height:72px;font-size:14px}
+#touch .acts .sm{width:52px;height:52px;font-size:12px}
+#touch .top{position:fixed;top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));display:flex;gap:6px}
+#touch .top button{width:40px;height:40px;border-radius:10px;font-size:16px}
+#touch [data-a="interact"].ready{border-color:#f2c14e;color:#f2c14e;animation:pulse .5s infinite alternate}
+body.portrait #touch .dpad button{width:58px;height:58px}
+body.portrait #touch .dpad button.sm{width:50px;height:42px}
+body.portrait #touch .acts{gap:7px}
+body.portrait #touch .acts button{width:56px;height:56px}
+body.portrait #touch .acts .big{width:64px;height:64px}
+body.portrait #touch .acts .sm{width:46px;height:46px;justify-self:center}
+body.landscape #touch button{opacity:.75}
+body.landscape #touch .dpad button{width:56px;height:56px}
+body.landscape #touch .dpad button.sm{width:44px;height:36px}
+body.landscape #touch .acts .big{width:60px;height:60px}
+body.landscape #touch .acts button{width:50px;height:50px;font-size:11px}
+body.landscape #touch .acts .sm{width:44px;height:44px}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="320" height="180"></canvas>
+  <div id="float"></div>
+  <div id="hud" hidden>
+    <div class="bar hp"><b></b><i></i></div>
+    <div class="bar st"><i></i></div>
+    <div class="bar heat" hidden><i></i></div>
+    <div class="bar breath" hidden><i></i></div>
+    <div class="hrow"><span id="flasks"></span><span id="mem">◆ 0</span></div>
+    <div class="hrow"><span id="formName"></span></div>
+  </div>
+  <div id="bossbar" hidden><div class="nm"></div><div class="bar"><b></b><i></i></div></div>
+  <div id="toast"><div class="big"></div><div class="sm"></div></div>
+  <div id="hint"></div>
+  <div id="prompt" hidden></div>
+  <div id="fade"></div>
+</div>
+
+<div id="dialog" hidden><div class="who"></div><div class="txt"></div><div class="choices"></div><div class="nx">▼</div></div>
+
+<div id="title" class="screen">
+  <div class="wrap">
+    <h1>A Terra<br>que Rejeitou</h1>
+    <div class="sub">Quando as lendas são esquecidas, os guardiões enlouquecem.</div>
+    <div class="btns">
+      <button class="btn" id="bContinue" hidden>Continuar</button>
+      <button class="btn" id="bNew">Novo jogo</button>
+      <button class="btn" id="bKeys">Controles</button>
+    </div>
+    <div class="note">Mundo fictício, inspirado nos biomas e nos povos do Brasil. O pacto, a Lei antiga e os ecos são criações do jogo; Mapinguari, Capelobo, Pai do Mato, Labatut e Corpo-seco vêm de lendas contadas pelo país.</div>
+  </div>
+</div>
+
+<div id="card" class="screen" hidden><div class="k"></div><div class="t"></div><div class="s"></div><div class="l"></div><div class="go">toque ou aperte para continuar</div></div>
+
+<div id="menu" class="screen dim" hidden><div class="panel"></div></div>
+
+<div id="dead" class="screen"><div>A MEMÓRIA SE APAGA</div><small>As memórias que você carregava ficaram onde você caiu.</small></div>
+
+<div id="rotate" hidden>Dica: gire o celular para ver maior</div>
+
+<div id="touch" hidden>
+  <div class="grp dpad">
+    <div class="row"><button class="sm" data-a="heal">Cura</button><button class="sm" data-a="interact">Agir</button></div>
+    <div class="row"><button data-a="left">◀</button><button data-a="right">▶</button></div>
+  </div>
+  <div class="grp acts">
+    <button data-a="special">Espe&shy;cial</button>
+    <button data-a="shoot">Tiro</button>
+    <span></span>
+    <button data-a="dodge">Esqui&shy;va</button>
+    <button class="big" data-a="attack">Golpe</button>
+    <button class="big" data-a="jump">Pular</button>
+  </div>
+  <div class="top">
+    <button data-a="swap" title="Trocar forma" hidden>⟳</button>
+    <button data-a="inv" title="Inventário">▤</button>
+    <button data-a="pause" title="Pausa">II</button>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/textos.js"></script>
+<script src="js/itens.js"></script>
+<script src="js/art.js"></script>
+<script src="js/tiles.js"></script>
+<script src="js/fauna.js"></script>
+<script src="js/world.js"></script>
+<script src="js/bosses.js"></script>
+<script src="js/beasts.js"></script>
+<script src="js/story.js"></script>
+<script src="js/gruta.js"></script>
+</body>
+</html>
