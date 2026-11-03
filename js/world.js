@@ -96,6 +96,7 @@ function prepareTrees(L) {
 function loadLevel(id) {
   const L = LEVELS[id]();
   L.id = id;
+  if (typeof configureJourney === 'function') configureJourney(L);
   const AR = L.arena;
   if (AR && AR.x0 + AW > L.w) {
     const old = L.w; L.w = AR.x0 + AW;
@@ -105,6 +106,7 @@ function loadLevel(id) {
   L.solids.push({ x: -20, y: -200, w: 20, h: 500, t: 'g', wall: true }, { x: L.w, y: -200, w: 20, h: 500, t: 'g', wall: true });
   applyWorldState(L);
   if (!L.cave) { addSkyCanopies(L); prepareTrees(L); }
+  if (typeof finishJourneyScenery === 'function') finishJourneyScenery(L);
   // tufos de grama decorativos
   const r = seeded(id.length * 97 + 3);
   for (const s of L.solids) if (s.t === 'g' && !s.wall && !s.block) for (let x = s.x + 2; x < s.x + s.w - 2; x += 3 + r() * 9 | 0) L.decor.push({ x, y: s.y, h: 1 + r() * 4 | 0, c: r() });
@@ -217,7 +219,7 @@ function updatePlayer(dt) {
     const sh = inShade(P.x + 5);
     if (sh) G.heat = Math.max(0, G.heat - 60 * dt);
     else G.heat = Math.min(100, G.heat + 100 * (F.heatRes || 1) * (1 - itemBonus('heat')) * dt * (G.lock ? 0 : 1));
-    if (G.heat >= 100) { P.burn = (P.burn || 0) - dt; if (P.burn <= 0) { P.burn = G.heatMul > 1 ? 0.3 : 0.5; P.hp -= 5; floatText(P.x + 5, P.y - 2, 'calor', '#ff8a5a'); if (P.hp <= 0) die(); } }
+    if (G.heat >= 100 && !G.lock) { P.burn = (P.burn || 0) - dt; if (P.burn <= 0) { P.burn = G.heatMul > 1 ? 0.3 : 0.5; P.hp -= 5; floatText(P.x + 5, P.y - 2, 'calor', '#ff8a5a'); if (P.hp <= 0) die(); } }
     else if (G.heat >= 75 && Math.random() < 0.08) part(P.x + 5 + rnd(-4, 4), P.y + rnd(0, 6), 0, rnd(-30, -10), 0.6, '#fff0c0');
     // sol a pino também fora da luta: de tempos em tempos a queimadura acelera por alguns segundos
     if (!G.boss) { G.sunCd = (G.sunCd == null ? 20 : G.sunCd) - dt; if (G.sunT > 0) { G.sunT -= dt; G.heatMul = 2; if (G.sunT <= 0) G.heatMul = 1; } else if (G.sunCd <= 0 && !G.lock) { G.sunCd = rnd(22, 34); G.sunT = 5; showToast('Sol a pino', 'procure a sombra', 1.6); } }
@@ -278,7 +280,7 @@ function startAttack(cont) {
   faceMouse();
   P.def = A.type === 'combo' ? Object.assign({ type: 'melee' }, A.hits[P.combo]) : A;
   P.state = 'attack'; P.stT = 0; P.hitSet = new Set(); P.shot = false;
-  useSt(A.st * PERTO.st); SFX.swing();
+  useSt(A.st * PERTO.st); SFX.swing(P.form);
   if (P.onG) P.vx = P.f * 30;
   emitNoise(P.x + 5, P.y + 11, 70);
 }
@@ -431,6 +433,11 @@ function makeEnemy(type, x, y) {
   if (d.fly) { e.hy = e.y; } else e.stepH = 18;
   return e;
 }
+function enemyPatrolBounds(e) {
+  const min = G.lvl.enemyMinX;
+  if (min == null || e.x >= min) return;
+  e.x = min; e.f = 1; e.vx = Math.abs(e.vx);
+}
 function updateEnemies(dt) {
   // logo depois de renascer na fogueira os monstros levam 1 s para reagir
   if (G.grace > 0) { G.grace -= dt; for (const e of G.ents) e.t += dt; return; }
@@ -445,6 +452,7 @@ function updateEnemies(dt) {
       e.stag -= dt; e.vx *= Math.pow(0.02, dt);
       if (ET[e.type].fly) { e.x += e.vx * dt; e.y += e.vy * dt; e.vy *= Math.pow(0.05, dt); }
       else { e.vy += GRAV * dt; moveBody(e, dt); }
+      enemyPatrolBounds(e);
       if (e.y > (G.lvl.h || WORLD_H) + 60) e.hp = 0;
       continue;
     }
@@ -502,6 +510,7 @@ function updateEnemies(dt) {
       e.vy += GRAV * dt; moveBody(e, dt);
     } else if (e.ai === 'wolf') updateWolf(e, dt, dx, dy);
     else if (CAVE_AI[e.ai]) CAVE_AI[e.ai](e, dt, dx, dy);
+    enemyPatrolBounds(e);
     if (overlap(e, P) && !e.noTouch && e.ai !== 'brute' && e.ai !== 'lanceiro' && !(e.ai === 'wolf' && e.st === 'rest')) hurtPlayer(e.dmg, e.x + e.w / 2);
     if (e.y > (G.lvl.h || WORLD_H) + 60) e.hp = 0;
   }
@@ -671,12 +680,21 @@ function renderWorld() {
   // perigos de fundo
   for (const h of G.hazards) if (h.kind !== 'gas') (HZ[h.kind] || h).draw(h);
   // NPCs
-  for (const n of L.npcs) { if (n.hidden) continue; n.t += 1 / 60; const gy = groundY(n.x, n.y0 || 0); drawHuman(ctx, n.x, gy, n.f, { kind: n.anim, t: n.t }, n.spec); }
+  for (const n of L.npcs) {
+    if (n.hidden) continue;
+    n.t += 1 / 60;
+    const gy = groundY(n.x, n.y0 || 0);
+    ctx.save(); ctx.translate(n.x, gy); ctx.scale(n.scale || 1, n.scale || 1);
+    drawHuman(ctx, 0, 0, n.f, { kind: n.anim, t: n.t, ph: n.ph || 0 }, n.spec);
+    ctx.restore();
+    if (typeof drawJourneyNPCDetails === 'function') drawJourneyNPCDetails(n, gy);
+  }
   // inimigos
   const eye = EYE[L.biome];
   for (const e of G.ents) if (e.hp > 0 && e.x > cx - 40 && e.x < cx + W + 40) drawEnemy(ctx, e, e.x + e.w / 2, e.y + e.h, e.t, eye);
   if (G.boss) drawBoss(G.boss);
   drawBossFx();
+  drawMapinguariFx();
   // jogador
   if (G.P && !G.P.hidden) drawPlayer(G.P, t);
   drawCaveFront(L, t);
@@ -722,6 +740,7 @@ function renderWorld() {
 }
 function drawSolid(s, gp, cx) {
   const b = G.lvl.biome;
+  if (s.kind === 'journeyBridge') return drawJourneyBridge(s);
   if (s.t === 'p' && !(s.move && s.move.canoe)) return drawPlatSolid(s, b);
   if (s.t === 'g' && s.block) return drawBlockSolid(s, b);
   if (s.t === 'g') return drawGroundSolid(s, b, cx);
@@ -785,6 +804,7 @@ const ECHO_ART = {
 };
 function drawProp(p, t) {
   const gy = p.y != null ? p.y : groundY(p.x);
+  if (p.kind.startsWith('journey')) return drawJourneyProp(p, t, gy);
   if (p.kind === 'hut') { rect(ctx, p.x - 18, gy - 14, 36, 14, '#5a3e24'); for (let i = 0; i < 22; i++) rect(ctx, p.x - 22 + i, gy - 14 - i * 0.7, 44 - i * 2, 1, i % 3 ? '#8a6a3a' : '#a8844a'); rect(ctx, p.x - 3, gy - 9, 6, 9, '#1a100a'); }
   if (p.kind === 'malocas') { for (let k = 0; k < 2; k++) { const x = p.x + k * 50; for (let i = 0; i < 18; i++) ell(ctx, x, gy - i, 22 - i * 0.6 | 0, 1, i % 3 ? '#7a5a2e' : '#9a7a40'); rect(ctx, x - 3, gy - 7, 6, 7, '#1a100a'); } }
   if (p.kind === 'stilts') { for (let i = 0; i < 4; i++) rect(ctx, p.x - 16 + i * 10, gy - 20, 2, 20, '#4a3020'); rect(ctx, p.x - 20, gy - 22, 40, 3, '#6a4428'); for (let i = 0; i < 16; i++) rect(ctx, p.x - 22 + i, gy - 22 - i * 0.6 - 1, 44 - i * 2, 1, i % 2 ? '#a8844a' : '#8a6a3a'); }

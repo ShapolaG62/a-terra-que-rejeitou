@@ -9,7 +9,10 @@ function makeBoss(kind, x) {
 }
 function bossBox(B) { return { x: B.x - B.w / 2, y: B.y - B.h, w: B.w, h: B.h }; }
 function arenaX() { const A = G.lvl.arena; return [A.x0 + 16, A.x0 + AW - 16]; }
-function go(B, st, tt) { B.st = st; B.tt = tt; B.done = false; }
+function go(B, st, tt) {
+  B.st = st; B.tt = tt; B.done = false;
+  if (B.kind === 'mapinguari') { B.stateDur = tt; B.stateT = 0; B.fxT = 0; B.hitDmg = 0; }
+}
 function bossHurt(B, dmg, dir, o = {}) {
   if (['intro', 'down', 'still', 'ask', 'yield'].includes(B.st) || B.inv) return false;
   if (B.hidden && !(FORMS[G.P.form] || {}).track) return false;
@@ -24,12 +27,13 @@ function bossHurt(B, dmg, dir, o = {}) {
   return true;
 }
 function updateBoss(dt) {
+  updateBossFx(dt);
   const B = G.boss; if (!B) return;
   B.t += dt; B.flash -= dt; B.tt -= dt * DIFF.bossSpeed;
-  updateBossFx(dt);
+  if (B.kind === 'mapinguari') B.stateT = (B.stateT || 0) + dt * DIFF.bossSpeed;
   if (B.st !== B.prevSt) {
     const prev = B.prevSt; B.prevSt = B.st;
-    if (FX_ENTER[B.st]) FX_ENTER[B.st](B);
+    if (B.kind !== 'mapinguari' && FX_ENTER[B.st]) FX_ENTER[B.st](B);
     if (B.st === 'down') { B.downAt = B.t; B.knelt = false; }
     if (B.st === 'rec' && ['slamW', 'stompW', 'jacareW', 'waveW'].includes(prev)) bossFx('burst', B.x + B.f * 22, B.kind === 'paidomato' ? 152 : GY, B.f, { col: B.kind === 'labatut' ? '#d8b890' : '#c8b088' });
   }
@@ -44,7 +48,8 @@ function updateBoss(dt) {
   if (B.st === 'intro') { if (B.tt <= 0) go(B, 'idle', 0.5); }
   else if (B.st !== 'down') BOSSES[B.kind].update(B, dt);
   const [a0, a1] = arenaX(); B.x = clamp(B.x, a0 + B.w / 2 - 8, a1 - B.w / 2 + 8);
-  if (B.contact && !B.hidden && !['down', 'intro', 'still', 'ask', 'yield'].includes(B.st) && overlap(bossBox(B), G.P)) hurtPlayer(B.hitDmg || B.contact, B.x);
+  const contactActive = B.kind !== 'mapinguari' || B.st === 'walk' || B.st === 'charge';
+  if (contactActive && B.contact && !B.hidden && !['down', 'intro', 'still', 'ask', 'yield'].includes(B.st) && overlap(bossBox(B), G.P)) hurtPlayer(B.hitDmg || B.contact, B.x);
 }
 function drawBoss(B) {
   if (B.hidden) {
@@ -58,57 +63,223 @@ function drawBoss(B) {
 function pdx() { return G.P.x + 5 - G.boss.x; }
 function strands(P, x0, y0, w, h, col, seed) { for (let i = 0; i < w; i += 2) { const hh = 3 + hash(seed + i) * h * 0.4; P(x0 + i, y0 + hash(seed + i * 3) * (h - hh), 1, hh, col); } }
 
+// Mapinguari: avisos âmbar precedem o golpe; terra e folhas acompanham o impacto.
+function mapinguariDebris(x, y, count, leaves = false) {
+  for (let i = 0; i < count; i++) part(x + rnd(-20, 20), y - rnd(1, 5), rnd(-75, 75), rnd(-100, -25), rnd(0.35, 0.7), leaves && i % 2 ? '#9aab63' : i % 3 ? '#947b54' : '#d1b77e', i % 4 ? 1 : 2, leaves ? 80 : 220);
+}
+function mapinguariImpact(B, second) {
+  SFX.mapSlam(second ? 'echo' : 'heavy'); G.cam.shake = Math.max(G.cam.shake, second ? 5 : 7);
+  bossFx('mapImpact', B.x, GY, B.f, { life: 0.6, r: second ? 58 : 48 });
+  mapinguariDebris(B.x, GY, 24);
+  const box = { x: B.x - 40, y: GY - 18, w: 80, h: 18 };
+  if (overlap(box, G.P)) hurtPlayer(second ? 18 : 22, B.x);
+  for (const s of [-1, 1]) addHazard({ kind: 'mapShock', owner: B, x: B.x + s * 27 - 7, y: GY - 14, w: 14, h: 14, vx: s * (second ? 125 : 150), life: 2.6, dmg: second ? 18 : 20, update: mapinguariShockUpdate, draw: mapinguariShockDraw });
+}
+function mapinguariHazardActive(h) {
+  return G.boss === h.owner && h.owner.st !== 'down' && h.owner.hp > 0;
+}
+function mapinguariShockUpdate(h, dt) {
+  if (!mapinguariHazardActive(h)) { h.life = 0; return; }
+  h.x += h.vx * dt;
+  const [a0, a1] = arenaX();
+  if (h.x + h.w < a0 || h.x > a1 || solidAt(h.x + (h.vx > 0 ? h.w : 0), h.y + h.h - 2)) { h.life = 0; return; }
+  if (!h.hit && overlap(h, G.P)) h.hit = hurtPlayer(h.dmg, h.x + h.w / 2);
+  h.dust = (h.dust || 0) - dt;
+  if (h.dust <= 0) { h.dust = 0.07; part(h.x + 7, GY, -Math.sign(h.vx) * rnd(12, 30), rnd(-45, -20), 0.3, '#c2a472', 1, 130); }
+}
+function mapinguariShockDraw(h) {
+  const base = ctx.globalAlpha;
+  ctx.globalAlpha = base * Math.min(1, h.life * 3);
+  for (let i = 0; i < 7; i++) {
+    const height = 4 + Math.sin(i / 6 * HPI) * 10;
+    rect(ctx, h.x + i * 2, GY - height, 2, height, i % 2 ? '#62543c' : '#a08c5e');
+    rect(ctx, h.x + i * 2, GY - height, 2, 2, '#e7cb8b');
+  }
+  line(ctx, h.x - 5, GY - 1, h.x + h.w + 5, GY - 1, '#bd995d');
+  ctx.globalAlpha = base;
+}
+function mapinguariGasUpdate(h, dt) {
+  if (!mapinguariHazardActive(h)) { h.life = 0; return; }
+  h.x += h.vx * dt;
+  const [a0, a1] = arenaX();
+  if (h.x + h.w < a0 || h.x > a1) { h.life = 0; return; }
+  const P = G.P;
+  if (h.t < 0.22 || P.state === 'dead' || P.inv > 0 || G.lock > 0 || !overlap(h, P)) return;
+  P.slow = 0.25; P.st = Math.max(0, P.st - 24 * dt); P.stDelay = 0.35;
+  if (h.stun && !h.used) { h.used = true; P.stun = 0.35; floatText(P.x + 5, P.y - 6, 'atordoado', '#c9d88c'); }
+}
+function mapinguariGasDraw(h) {
+  const base = ctx.globalAlpha, fade = Math.min(1, h.t / 0.3, h.life / 0.65);
+  for (let i = 0; i < 9; i++) {
+    const x = h.x + 8 + i / 8 * (h.w - 16), y = h.y + h.h / 2 + Math.sin(h.t * 3 + i * 2.2) * 7;
+    ctx.globalAlpha = base * fade * (i % 2 ? 0.24 : 0.4);
+    ell(ctx, x, y, 13, 10, i % 2 ? '#b1c86a' : '#617a37');
+    ctx.globalAlpha = base * fade * 0.65;
+    rect(ctx, x + Math.sin(h.t * 4 + i) * 6, y - 6, 2, 1, '#dbdf92');
+  }
+  ctx.globalAlpha = base;
+}
+function mapinguariRing(x, y, rx, ry, col, alpha) {
+  const base = ctx.globalAlpha;
+  ctx.globalAlpha = base * alpha;
+  for (let i = 0; i < 40; i++) { const a = i / 40 * HPI * 2; rect(ctx, x + Math.cos(a) * rx, y + Math.sin(a) * ry, 2, 1, col); }
+  ctx.globalAlpha = base;
+}
+function drawMapinguariWarnings(B) {
+  if (B.mood || ['intro', 'down', 'dazed', 'idle', 'rec', 'walk'].includes(B.st)) return;
+  const base = ctx.globalAlpha, p = B.stateDur > 0 ? clamp(1 - B.tt / B.stateDur, 0, 1) : 0;
+  const pulse = 0.45 + Math.sin(B.t * 14) * 0.12, gold = '#e5c77e';
+  if (B.st === 'slamW' || B.st === 'slam' && B.phase === 2 && B.stateT > 0.28 && B.stateT < 0.62) {
+    const k = B.st === 'slamW' ? p : (B.stateT - 0.28) / 0.34;
+    mapinguariRing(B.x, GY - 1, 40 + k * 18, 5 + k * 3, gold, pulse);
+    mapinguariRing(B.x, GY - 1, 27, 4, '#7f9850', 0.6);
+    for (let i = 0; i < 6; i++) rect(ctx, B.x - 24 + i * 9, GY - 4 - Math.sin(k * HPI) * (3 + i % 3), 2, 2, '#a38a58');
+  } else if (B.st === 'chargeW') {
+    const [a0, a1] = arenaX(), length = B.f > 0 ? a1 - B.x : B.x - a0;
+    ctx.globalAlpha = base * (0.25 + p * 0.4);
+    for (let x = 28; x < length; x += 18) {
+      const px = B.x + B.f * x;
+      line(ctx, px - B.f * 4, GY - 5, px, GY - 2, gold);
+      line(ctx, px - B.f * 4, GY + 1, px, GY - 2, gold);
+    }
+    mapinguariRing(B.x, GY - 1, 26, 4, gold, 0.6);
+  } else if (B.st === 'biteW' || B.st === 'clawW') {
+    const reach = B.st === 'biteW' ? 57 : 74;
+    ctx.globalAlpha = base * pulse;
+    for (let x = 10; x < reach; x += 5) rect(ctx, B.x + B.f * x, GY - 2, 3, 1, gold);
+    mapinguariRing(B.x + B.f * 16, B.y - 36, 6 + p * 4, 8 + p * 4, gold, pulse);
+  } else if (B.st === 'gasW') {
+    mapinguariRing(B.x + B.f * 15, B.y - 36, 7 + p * 5, 7 + p * 4, '#c7d779', pulse);
+    ctx.globalAlpha = base * (0.25 + p * 0.3);
+    for (let i = 0; i < 5; i++) rect(ctx, B.x + B.f * (18 + p * 12 + i * 5), B.y - 38 + Math.sin(B.t * 5 + i) * 6, 2, 2, '#a9bf67');
+  }
+  ctx.globalAlpha = base;
+}
+function drawMapinguariFx() {
+  const base = ctx.globalAlpha;
+  for (const e of G.bfx) {
+    if (!e.k.startsWith('map')) continue;
+    const p = clamp(e.t / e.life, 0, 1), fade = 1 - p;
+    if (e.k === 'mapClaw') {
+      for (let l = 0; l < 3; l++) for (let i = 0; i < 18; i++) {
+        const a = (-1.15 + i / 17 * 2.3) * (e.reverse ? -1 : 1), r = 49 + l * 4;
+        ctx.globalAlpha = base * fade * (0.35 + i / 26);
+        const x = e.x + e.f * Math.cos(a) * r, y = e.y + Math.sin(a) * (15 + l * 3);
+        rect(ctx, x - e.f * 2, y, 3, 2, '#a75e35'); rect(ctx, x, y, 2, 1, '#fff0ba');
+      }
+    } else if (e.k === 'mapBite') {
+      const open = Math.sin(p * HPI) * 16;
+      ctx.globalAlpha = base * fade;
+      for (const s of [-1, 1]) for (let i = 0; i < 12; i++) {
+        const x = e.x + e.f * i * 3, y = e.y + s * (open * Math.sin(i / 11 * HPI) + 2);
+        rect(ctx, x, y, 3, 2, '#e0c389'); if (i % 3 === 0) rect(ctx, x, y - s * 2, 2, 4, '#fff0cb');
+      }
+    } else if (e.k === 'mapImpact') {
+      mapinguariRing(e.x, e.y - 1, e.r * p, 3 + p * 8, '#e5c485', fade * 0.85);
+      mapinguariRing(e.x, e.y, e.r * p * 0.7, 2 + p * 5, '#8b9c57', fade * 0.6);
+      ctx.globalAlpha = base * fade;
+      for (let i = -4; i <= 4; i++) { const x = e.x + i * p * 9, y = e.y - Math.sin(p * HPI) * (18 - Math.abs(i) * 2); rect(ctx, x, y, 2 + Math.abs(i % 2), 3, i % 2 ? '#af9463' : '#e7cc91'); }
+    } else if (e.k === 'mapRoar') {
+      for (let i = 0; i < 3; i++) { const k = clamp(p * 1.5 - i * 0.2, 0, 1); mapinguariRing(e.x, e.y, e.r * k, e.r * k * 0.7, i % 2 ? '#b6c779' : '#e7cd91', (1 - k) * 0.65); }
+    } else if (e.k === 'mapBreath') {
+      ctx.globalAlpha = base * fade * 0.45;
+      for (let i = 0; i < 6; i++) ell(ctx, e.x + e.f * (p * 45 + i * 6), e.y + Math.sin(i * 2 + p * 5) * 8, 4 + i, 3 + i, i % 2 ? '#c4d67b' : '#7c984a');
+    } else if (e.k === 'mapTrail') {
+      ctx.globalAlpha = base * fade * 0.4;
+      for (let i = 0; i < 4; i++) rect(ctx, e.x - e.f * (p * 18 + i * 4), e.y - 18 + i * 12, 6 + i * 2, 1, i % 2 ? '#c3c17c' : '#718049');
+    }
+    ctx.globalAlpha = base;
+  }
+}
+
 const BOSSES = {
   // ---------------- Amazônia ----------------
   mapinguari: {
     nome: 'MAPINGUARI', sub: 'guardião da Amazônia',
-    init: () => ({ w: 40, h: 84, hp: 430, contact: 14 }),
+    init: () => ({ w: 40, h: 84, hp: 430, contact: 14, stateDur: 1.4, stateT: 0, fxT: 0, slamHits: 0, swing: 0 }),
     update(B, dt) {
       const dx = pdx(), adx = Math.abs(dx), ph2 = B.phase === 2;
-      if (B.phase === 1 && B.hp < B.hpMax / 2) { B.phase = 2; go(B, 'roar', 1.2); SFX.roar(); G.cam.shake = 5; floatText(B.x, B.y - 60, 'RUGIDO', '#c8f060'); return; }
+      if (B.phase === 1 && B.hp < B.hpMax / 2) {
+        B.phase = 2; go(B, 'roar', 1.45); SFX.mapRoar();
+        G.hazards = G.hazards.filter(h => h.owner !== B);
+        G.cam.shake = Math.max(G.cam.shake, 5);
+        bossFx('mapRoar', B.x, B.y - 42, B.f, { life: 1.1, r: 94 });
+        mapinguariDebris(B.x, B.y, 24, true);
+        floatText(B.x, B.y - 88, 'A MATA RUGE', '#e6c978'); return;
+      }
       B.hitDmg = 0;
+      B.fxT -= dt;
+      if (B.st.endsWith('W') && B.fxT <= 0) {
+        B.fxT = 0.1;
+        const gas = B.st === 'gasW';
+        part(B.x + B.f * rnd(8, 20), B.y - rnd(gas ? 30 : 45, gas ? 45 : 64), -B.f * rnd(3, 12), rnd(-20, -8), 0.35, gas ? '#a8c66b' : '#d7ba79', 1, -10);
+      }
       switch (B.st) {
         case 'idle': {
           if (B.tt > 0) break;
           B.f = Math.sign(dx) || B.f;
           const r = Math.random();
-          let n;
-          if (adx < 46) n = r < 0.6 ? 'biteW' : 'slamW';
-          else if (ph2 && r < 0.25) n = 'chargeW';
-          else if (r < 0.4) n = 'walk'; else if (r < 0.7) n = 'slamW'; else n = B.last === 'gasW' ? 'walk' : 'gasW';
+          let n = adx < 58 ? (r < 0.4 ? 'biteW' : r < 0.78 ? 'clawW' : 'slamW')
+            : ph2 && adx > 96 && r < 0.28 ? 'chargeW'
+            : r < 0.32 ? 'walk' : r < 0.64 ? 'slamW' : 'gasW';
+          if (n === B.last) n = n === 'gasW' ? 'walk' : adx < 82 ? (n === 'clawW' ? 'biteW' : 'clawW') : n === 'slamW' ? 'gasW' : 'slamW';
           B.last = n;
-          go(B, n, { walk: 1.6, biteW: 0.5, slamW: ph2 ? 0.7 : 0.9, gasW: 0.6, chargeW: 0.8 }[n]);
-          if (n === 'chargeW') SFX.roar();
+          go(B, n, { walk: 1.35, biteW: 0.72, clawW: 0.86, slamW: ph2 ? 0.94 : 1.08, gasW: 1.0, chargeW: 1.1 }[n]);
+          if (n === 'chargeW') SFX.mapSnort();
           break;
         }
-        case 'walk': B.f = Math.sign(dx) || B.f; B.x += B.f * (ph2 ? 34 : 26) * dt; if (B.t % 0.5 < dt) { SFX.land(); G.cam.shake = 1; } if (B.tt <= 0 || adx < 40) go(B, 'idle', 0.15); break;
-        case 'biteW': if (B.tt <= 0) { go(B, 'bite', 0.25); SFX.roar(); } break;
+        case 'walk':
+          B.f = Math.sign(dx) || B.f; B.x += B.f * (ph2 ? 35 : 27) * dt;
+          if (B.fxT <= 0) { B.fxT = 0.48; SFX.mapStep(); G.cam.shake = Math.max(G.cam.shake, 1.2); mapinguariDebris(B.x, B.y, 4); }
+          if (B.tt <= 0 || adx < 52) go(B, 'idle', 0.22); break;
+        case 'biteW': if (B.tt <= 0) { go(B, 'bite', 0.34); SFX.mapBite(); bossFx('mapBite', B.x + B.f * 20, B.y - 36, B.f, { life: 0.3 }); } break;
         case 'bite': {
-          const hb = { x: B.f > 0 ? B.x : B.x - 44, y: B.y - 48, w: 44, h: 28 };
-          if (!B.done && overlap(hb, G.P)) B.done = hurtPlayer(28, B.x);
-          if (B.tt <= 0) go(B, 'rec', 0.6); break;
+          if (B.stateT < 0.18) B.x += B.f * 58 * dt;
+          const hb = { x: B.f > 0 ? B.x + 5 : B.x - 57, y: B.y - 42, w: 52, h: 36 };
+          if (B.stateT >= 0.06 && B.stateT <= 0.26 && !B.done && overlap(hb, G.P)) B.done = hurtPlayer(28, B.x);
+          if (B.tt <= 0) go(B, 'rec', 0.82); break;
         }
-        case 'slamW': if (B.tt <= 0) {
-          SFX.boom(); G.cam.shake = 7;
-          for (const s of [-1, 1]) addHazard({ kind: 'shock', x: B.x + s * 16 - 4, y: GY - 10, w: 8, h: 10, vx: s * 140, life: 2.5, dmg: 20 });
-          if (ph2) setTimeout(() => { if (G.boss === B && B.st !== 'down') for (const s of [-1, 1]) addHazard({ kind: 'shock', x: B.x + s * 16 - 4, y: GY - 10, w: 8, h: 10, vx: s * 110, life: 2.5, dmg: 18 }); }, 450);
-          go(B, 'rec', 0.8);
-        } break;
-        case 'gasW': if (B.tt <= 0) {
-          SFX.splash();
-          for (let i = 0; i < (ph2 ? 3 : 2); i++) addHazard({ kind: 'gas', x: B.x + B.f * (10 + i * 22) - 20, y: GY - 44 - i * 6, w: 40, h: 32, vx: B.f * (22 + i * 10), life: 6, stun: ph2 });
-          floatText(B.x, B.y - 58, 'cheiro forte', '#c8f060');
-          go(B, 'rec', 0.6);
-        } break;
-        case 'chargeW': B.f = Math.sign(dx) || B.f; if (B.tt <= 0) go(B, 'charge', 2); break;
+        case 'clawW': if (B.tt <= 0) { go(B, 'claw', ph2 ? 0.78 : 0.42); B.swing = -1; } break;
+        case 'claw': {
+          const swing = ph2 && B.stateT >= 0.43 ? 1 : 0, at = B.stateT - swing * 0.43;
+          if (at >= 0.08 && B.swing !== swing) {
+            B.swing = swing; B.done = false; SFX.mapClaw();
+            bossFx('mapClaw', B.x + B.f * 12, B.y - 35, B.f, { life: 0.28, reverse: !!swing });
+          }
+          const hb = { x: B.f > 0 ? B.x + 6 : B.x - 74, y: B.y - 39, w: 68, h: 34 };
+          if (at >= 0.08 && at <= 0.28 && !B.done && overlap(hb, G.P)) B.done = hurtPlayer(21, B.x);
+          if (B.tt <= 0) go(B, 'rec', ph2 ? 0.78 : 0.92); break;
+        }
+        case 'slamW': if (B.tt <= 0) { go(B, 'slam', ph2 ? 1.15 : 0.62); B.slamHits = 0; } break;
+        case 'slam':
+          if (B.slamHits === 0 && B.stateT >= 0.12) { B.slamHits = 1; mapinguariImpact(B, false); }
+          if (ph2 && B.slamHits === 1 && B.stateT >= 0.62) { B.slamHits = 2; mapinguariImpact(B, true); }
+          if (B.tt <= 0) go(B, 'rec', 1.05); break;
+        case 'gasW': if (B.tt <= 0) { go(B, 'gas', 0.7); SFX.mapBreath(); } break;
+        case 'gas':
+          if (!B.done && B.stateT >= 0.1) {
+            B.done = true;
+            const w = ph2 ? 86 : 68;
+            addHazard({ kind: 'mapGas', owner: B, x: B.f > 0 ? B.x + 12 : B.x - 12 - w, y: GY - 45, w, h: 40, vx: B.f * (ph2 ? 35 : 28), life: ph2 ? 4.8 : 4.2, stun: ph2, update: mapinguariGasUpdate, draw: mapinguariGasDraw });
+            bossFx('mapBreath', B.x + B.f * 16, B.y - 36, B.f, { life: 0.55 });
+          }
+          if (B.tt <= 0) go(B, 'rec', 0.9); break;
+        case 'chargeW':
+          if (B.tt > 0.4) B.f = Math.sign(dx) || B.f;
+          if (B.tt <= 0) { go(B, 'charge', 2.1); SFX.mapCharge(); } break;
         case 'charge': {
-          B.x += B.f * 175 * dt; B.hitDmg = 26;
-          if (Math.random() < 0.5) part(B.x - B.f * 12, B.y, -B.f * 40, -30, 0.4, '#5a4030');
+          B.x += B.f * 185 * dt; B.hitDmg = 26;
+          if (B.fxT <= 0) { B.fxT = 0.08; mapinguariDebris(B.x - B.f * 12, B.y, 4); bossFx('mapTrail', B.x - B.f * 12, B.y - 30, B.f, { life: 0.22 }); }
           const [a0, a1] = arenaX();
-          if (B.x - B.w / 2 <= a0 - 6 || B.x + B.w / 2 >= a1 + 6 || B.tt <= 0) { SFX.boom(); G.cam.shake = 8; go(B, 'dazed', 1.4); floatText(B.x, B.y - 58, 'tonto'); }
+          if (B.x - B.w / 2 <= a0 - 6 || B.x + B.w / 2 >= a1 + 6 || B.tt <= 0) {
+            SFX.mapSlam('wall'); G.cam.shake = Math.max(G.cam.shake, 7); go(B, 'dazed', 1.65);
+            bossFx('mapImpact', B.x + B.f * 20, B.y - 15, B.f, { life: 0.55, r: 34 });
+            mapinguariDebris(B.x + B.f * 18, B.y, 20);
+            floatText(B.x, B.y - 88, 'vulnerável', '#e6c978');
+          }
           break;
         }
-        case 'dazed': case 'roar': case 'rec': if (B.tt <= 0) go(B, 'idle', ph2 ? 0.2 : 0.45); break;
+        case 'dazed': case 'roar': case 'rec': if (B.tt <= 0) go(B, 'idle', ph2 ? 0.32 : 0.5); break;
       }
     },
   },
@@ -207,7 +378,7 @@ const BOSSES = {
           for (let i = 0; i < (B.phase === 2 ? 4 : 3); i++) setTimeout(() => {
             if (G.boss !== B || B.st === 'down' || B.st === 'ask' || B.st === 'yield') return;
             const sx = i % 2 ? a1 + 10 : a0 - 10, sy = 20 + i * 6, tx = P2.x + 5, ty = P2.y + 8, L2 = Math.hypot(tx - sx, ty - sy);
-            shoot({ team: 'e', x: sx, y: sy, vx: (tx - sx) / L2 * 150 * sp, vy: (ty - sy) / L2 * 150 * sp, w: 8, h: 4, dmg: 14, kind: 'bird', life: 3.5 }); tone(1400, 0.15, 'triangle', 0.05, -400);
+            shoot({ team: 'e', x: sx, y: sy, vx: (tx - sx) / L2 * 150 * sp, vy: (ty - sy) / L2 * 150 * sp, w: 8, h: 4, dmg: 14, kind: 'bird', life: 3.5 }); SFX.bird();
           }, i * 380);
           go(B, 'rec', 0.8);
         } break;

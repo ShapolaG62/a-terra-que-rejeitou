@@ -2,6 +2,11 @@
 // Itens dos baús: runas, partes de itens e ferramentas. Ficam equipados assim que são coletados e somam status.
 
 const RELICS = {
+  no_da_margem: { n: 'Nó da margem', d: 'A fibra que segurei com Lia. Nina já atravessa a passarela. Um lugar para lembrar e ao qual voltar.', icon: 'colar', col: '#cead6a', fixed: true },
+  fita_do_caminho: { n: 'Fita do caminho', d: 'Cecília guardou um pedaço da fita do marco. Um caminho pode apontar para alguém.', icon: 'pena', col: '#d7ad67', fixed: true },
+  lasca_do_remo: { n: 'Lasca do remo', d: 'Bento deu a lasca que tirou do remo. O risco que mede o filho continua na madeira.', icon: 'parte', col: '#b49463', fixed: true },
+  retalho_de_sombra: { n: 'Retalho de sombra', d: 'Um remendo que sobrou da esteira de Rosa. Ainda cabe mais alguém na sombra.', icon: 'cesto', col: '#c9aa70', fixed: true },
+  casca_da_semente: { n: 'Casca da semente', d: 'Celina deixou a casca na minha mão. A semente ficou na terra e tem tempo para crescer.', icon: 'parte', col: '#a9ba7d', fixed: true },
   runa_raiz: { n: 'Runa da Raiz', d: '+20 de vida', hp: 20, icon: 'runa', col: '#6fbf73' },
   runa_sopro: { n: 'Runa do Sopro', d: '+20 de energia (fôlego para golpes e esquiva)', st: 20, icon: 'runa', col: '#9fd0e0' },
   runa_fogo: { n: 'Runa do Fogo', d: '+10% de dano', dmg: 0.1, icon: 'runa', col: '#e0703a' },

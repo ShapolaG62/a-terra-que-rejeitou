@@ -78,7 +78,7 @@ async function travelTo(id, x) {
   if (x == null && f0) { G.save.fire = { lvl: id, x: f0.x }; G.save.lit[f0.id] = 1; }
   writeSave();
   G.cam.x = clamp(px - W / 2, 0, G.lvl.w - W); G.state = 'play'; $('#hud').hidden = false; updateHudForm(); hud.cache = {};
-  startSlide(); showToast(G.lvl.name, '', 2.4);
+  startBlend(); showToast(G.lvl.name, '', 2.4);
 }
 
 // ---------- Selos de Cipós-de-Sangue ----------

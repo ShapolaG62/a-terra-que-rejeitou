@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sons da mata — prévia</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui;background:#101b16;color:#eee7cd}body{max-width:900px;margin:auto;padding:32px 20px}h1{margin:0;color:#e3ca8b}p{color:#b6bca5}a{color:#daca93}#sounds{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:24px 0}button{font:inherit;color:inherit;background:#243329;border:1px solid #69734c;border-radius:8px;padding:13px;cursor:pointer;text-align:left}button:hover{background:#374a33}button:disabled{opacity:.5;cursor:wait}small{display:block;color:#bac4a6}#result{white-space:pre-wrap;font-size:13px}#stage,#dialog,#rotate{display:none}
+</style>
+<h1>Sons da mata</h1>
+<p>Passos, impactos e ataques alternam versões sem repetir a anterior. O pulo e os sopros foram preservados.</p>
+<a href="preview-mapinguari.html">Testar na arena do Mapinguari →</a>
+<div id="sounds"></div>
+<label for="sequenceCue">Comparar repetições:</label>
+<select id="sequenceCue" aria-label="Som para comparar"><option value="step">Passos</option><option value="hit">Impactos</option><option value="swing">Golpes</option><option value="mapClaw">Garras do Mapinguari</option><option value="mapSlam">Pancadas do Mapinguari</option><option value="mapRoar">Rugidos do Mapinguari</option></select>
+<button id="sequence">Ouvir sequência</button>
+<button id="stopSequence" disabled>Parar sequência</button>
+<button id="audit">Verificar níveis de áudio</button>
+<p id="result" role="status">Escolha um som para ouvir.</p>
+<div id="stage"><canvas id="cv" width="432" height="243"></canvas></div>
+<div id="dialog"></div><div id="rotate"></div><audio id="music" hidden></audio>
+<script src="../js/core.js"></script>
+<script>
+const SOUND_LABELS = {
+ jump:['Pulo','Preservado · impulso e ar'],land:['Aterrissagem','Três impactos de terra'],swing:['Golpe','Quatro movimentos de ar'],dart:['Disparo','Preservado · sopro curto'],hit:['Impacto','Quatro batidas secas'],hurt:['Dano recebido','Batida abafada'],dash:['Dash','Quatro deslocamentos de vento'],heal:['Cura','Sementes e sopro melódico'],mem:['Memória coletada','Madeira aguda e sopro'],fire:['Fogo','Crepitação'],boom:['Grande impacto','Percussão grave e terra'],roar:['Rugido','Quatro vocalizações ásperas'],splash:['Água','Ruído filtrado'],echo:['Eco de memória','Sopro com reflexo suave'],rest:['Descanso','Percussão e notas suaves'],ui:['Menu','Toques curtos de madeira'],step:['Passo','Quatro texturas de terra e folhas'],mapStep:['Mapinguari · passos','Peso e terra'],mapClaw:['Mapinguari · garras','Quatro cortes e arranhões'],mapBite:['Mapinguari · mordida','Estalo e garganta'],mapSlam:['Mapinguari · pancada','Quatro impactos de terra'],mapSnort:['Mapinguari · preparação','Bufada curta'],mapCharge:['Mapinguari · investida','Impulso e grunhido'],mapRoar:['Mapinguari · rugido','Quatro ressonâncias profundas'],mapBreath:['Mapinguari · sopro','Preservado · ar áspero'],bird:['Pássaro','Assobio curto'],lose:['Morte','Sopro descendente']
+};
+const VARIATION_COUNTS = {land:3,swing:4,hit:4,hurt:3,dash:4,boom:3,roar:4,splash:3,ui:3,step:4,mapStep:3,mapClaw:4,mapBite:3,mapSlam:4,mapSnort:3,mapCharge:3,mapRoar:4};
+let sequenceTimers = [];
+function stopSequence() {
+ sequenceTimers.forEach(clearTimeout); sequenceTimers=[];
+ document.querySelector('#stopSequence').disabled=true;
+}
+function enableAudio() { audioInit(); AU.on=true; if (AU.master) AU.master.gain.value=0.55; }
+document.querySelector('#sequence').onclick = () => {
+ stopSequence(); enableAudio(); const key=document.querySelector('#sequenceCue').value;
+ document.querySelector('#stopSequence').disabled=false;
+ for(let i=0;i<6;i++) sequenceTimers.push(setTimeout(()=>{
+  SFX[key](); document.querySelector('#result').textContent=SOUND_LABELS[key][0]+' · repetição '+(i+1)+' de 6';
+ },i*(key==='mapRoar'?1000:650)));
+ sequenceTimers.push(setTimeout(stopSequence,6*(key==='mapRoar'?1000:650)));
+};
+document.querySelector('#stopSequence').onclick=stopSequence;
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopSequence();});
+for (const [key, [title, detail]] of Object.entries(SOUND_LABELS)) {
+ const b = document.createElement('button'); b.textContent = title;
+ const small = document.createElement('small'); small.textContent = detail; b.append(small);
+ b.onclick = () => { stopSequence(); enableAudio(); SFX[key](); document.querySelector('#result').textContent = title + ' · ' + detail; };
+ document.querySelector('#sounds').append(b);
+}
+document.querySelector('#audit').onclick = async () => {
+ const result = document.querySelector('#result'), buttons = [...document.querySelectorAll('button')];
+ stopSequence();
+ buttons.forEach(b => b.disabled = true); result.textContent = 'Verificando os efeitos…';
+ const saved = {ctx:AU.ctx,master:AU.master,on:AU.on,noise:noiseBuf,last:{...sfxLast},variants:JSON.parse(JSON.stringify(sfxVariants))};
+ const lines = []; let failed = 0;
+ try {
+  for (const key of Object.keys(SOUND_LABELS)) {
+   let worst=0, ok=true;
+   for(let version=0;version<(VARIATION_COUNTS[key]||1);version++) {
+   const c = new OfflineAudioContext(1, 96000, 48000);
+   AU.ctx = c; AU.master = c.createGain(); AU.master.gain.value = 0.55; AU.master.connect(c.destination); AU.on = true; noiseBuf = null;
+   for (const name of Object.keys(sfxLast)) delete sfxLast[name];
+   SFX[key]();
+   const buffer = await c.startRendering(), data = buffer.getChannelData(0);
+   let peak = 0, tail = 0, valid = true;
+   for (let i = 0; i < data.length; i++) { valid = valid && Number.isFinite(data[i]); peak = Math.max(peak, Math.abs(data[i])); if(i > data.length - 2400) tail += data[i]*data[i]; }
+   ok = ok && valid && peak > 0.0001 && peak < 0.98 && Math.sqrt(tail/2400) < 0.0001;
+   worst=Math.max(worst,peak);
+   }
+   if (!ok) failed++;
+   lines.push((ok?'✓ ':'✗ ') + SOUND_LABELS[key][0] + ' · '+(VARIATION_COUNTS[key]||1)+' versão(ões) · pico ' + (20*Math.log10(worst)).toFixed(1) + ' dBFS');
+  }
+  result.textContent = (failed ? failed+' efeito(s) precisam de revisão.' : lines.length+' efeitos verificados: áudio válido, sem saturação e com final silencioso.') + '\n\n' + lines.join('\n');
+  result.dataset.passed = String(failed === 0);
+ } catch(error) { result.textContent = error.message; result.dataset.passed = 'false'; }
+ finally {
+  AU.ctx=saved.ctx; AU.master=saved.master; AU.on=saved.on; noiseBuf=saved.noise;
+  for(const key of Object.keys(sfxLast)) delete sfxLast[key]; Object.assign(sfxLast,saved.last);
+  for(const key of Object.keys(sfxVariants)) delete sfxVariants[key]; Object.assign(sfxVariants,saved.variants);
+  buttons.forEach(b => b.disabled=false);
+  document.querySelector('#stopSequence').disabled=true;
+ }
+};
+</script>
+</html>

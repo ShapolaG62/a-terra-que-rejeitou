@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pessoas e caminhos — prévia jogável</title>
+<style>
+  :root { color-scheme:dark; font:14px/1.5 system-ui,sans-serif; color:#eadfc7; background:#0b1512; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:18px 22px; }
+  main { max-width:1320px; margin:auto; }
+  header { display:flex; justify-content:space-between; gap:20px; align-items:center; }
+  h1 { font:500 28px/1.2 Georgia,serif; margin:0; }
+  p { margin:5px 0 12px; color:#b8c0ad; }
+  a { color:#d3be83; }
+  .toolbar { display:flex; gap:7px; flex-wrap:wrap; margin:12px 0; align-items:center; }
+  button,select { border:1px solid #42503b; border-radius:6px; padding:7px 10px; background:#19291f; color:inherit; font:inherit; cursor:pointer; }
+  button:hover,button:focus-visible,select:focus-visible { outline:1px solid #c3ae78; background:#2c3e2b; }
+  button[aria-pressed="true"] { border-color:#d9c383; color:#fff0b8; background:#3c452b; }
+  iframe { display:block; width:100%; height:clamp(360px,calc(100vh - 400px),720px); border:1px solid #46513d; border-radius:9px; background:#080c0b; }
+  #status { color:#cbcfb7; font-size:12px; margin-top:10px; }
+  #errors { color:#ffc6a1; white-space:pre-wrap; }
+  label { display:flex; align-items:center; gap:7px; font-size:12px; color:#c2c7b1; }
+  .note { font-size:12px; }
+  @media(max-width:700px) { body { padding:12px; } h1 { font-size:23px; } iframe { height:62vh; } button,select { font-size:12px; } }
+</style>
+</head>
+<body>
+<main>
+  <header><div><h1>Pessoas e caminhos</h1><p>Encontros, pequenos gestos e a passagem contínua entre os biomas.</p></div><a href="../index.html">Abrir o jogo ↗</a></header>
+  <div class="toolbar" aria-label="Trechos para testar">
+    <button data-mode="prologo">Davi no prólogo</button>
+    <button data-mode="amazonia" aria-pressed="true">Chegada à margem</button>
+    <button data-mode="bridge">Ajuda na travessia</button>
+    <button data-mode="camp">Conversa da fogueira</button>
+    <button data-mode="shelter">Marca no tronco</button>
+    <button data-mode="boss">Luta do Mapinguari</button>
+    <button data-mode="decision">Escolha após a luta</button>
+    <button data-mode="spare">Retorno: poupar</button>
+    <button data-mode="purify">Retorno: purificar</button>
+  </div>
+  <div class="toolbar" aria-label="Outros encontros">
+    <label>Lugar <select id="region"><option value="cerrado">Cerrado · Cecília</option><option value="pantanal">Pantanal · Bento</option><option value="caatinga">Caatinga · Rosa</option><option value="mata">Mata Atlântica · Celina</option></select></label>
+    <button data-region-action="meet">Conhecer</button><button data-region-action="task">Ajudar</button><button data-region-action="camp">Conversa</button><button data-region-action="return">Reencontro</button>
+    <label>Decisão <select id="outcome"><option value="poupar">Poupar</option><option value="purificar">Purificar</option></select></label>
+  </div>
+  <div class="toolbar" aria-label="Passagens de bioma">
+    <label>Viagem <select id="route"><option value="amazonia:cerrado">Amazônia → Cerrado</option><option value="prologo:amazonia">Prólogo → Amazônia</option><option value="cerrado:gruta">Cerrado → Gruta</option><option value="gruta:pantanal">Gruta → Pantanal</option><option value="pantanal:caatinga">Pantanal → Caatinga</option><option value="caatinga:mata">Caatinga → Mata Atlântica</option><option value="mata:coracao">Mata Atlântica → Coração</option></select></label>
+    <button id="travel">Ver viagem</button><button id="skipTravel">Pular cutscene após 1s</button>
+  </div>
+  <div class="toolbar">
+    <label>Na fogueira <select id="memory"><option value="memory">Perguntei pelo guardião</option><option value="fear">Contei meu medo</option><option value="silence">Fiquei em silêncio</option></select></label>
+    <button id="interact">Interagir (E)</button><button id="advance">Avançar fala</button><button id="reload" disabled>Reabrir teste salvo</button>
+    <label><input type="checkbox" id="immortal" checked>Imortal nesta prévia</label>
+  </div>
+  <iframe id="game" title="Trechos jogáveis e viagens" allow="autoplay; gamepad"></iframe>
+  <div id="status" role="status">Carregando o trecho…</div><div id="errors" role="alert"></div>
+  <p class="note">Clique no jogo para usar o teclado: A/D anda, W pula, E interage, J/K ataca, Shift dá dash, Esc abre o diário. Esta página usa um progresso separado, apenas na memória.</p>
+</main>
+<script>
+'use strict';
+const frame = document.getElementById('game'), status = document.getElementById('status');
+let html = '', lastSave = null, selected = 'amazonia', loadId = 0;
+async function openPreview(mode, save) {
+  const id = ++loadId; selected = mode;
+  status.textContent = 'Carregando o trecho…'; document.getElementById('errors').textContent = '';
+  document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+  if (!html) html = await (await fetch('../index.html')).text();
+  if (id !== loadId) return;
+  if (!save) { lastSave = null; document.getElementById('reload').disabled = true; }
+  const config = { mode, save, campChoice: document.getElementById('memory').value, immortal: document.getElementById('immortal').checked, route: document.getElementById('route').value, outcome: document.getElementById('outcome').value };
+  const base = new URL('../', location.href).href;
+  const source = html.replace('<head>', '<head><base href="' + base + '"><script type="application/json" id="journeyPreviewConfig">' + JSON.stringify(config) + '<\/script>')
+    .replace('<script src="js/story.js"><\/script>', '<script src="tools/journey-preview.js"><\/script><script src="js/story.js"><\/script>');
+  frame.srcdoc = source;
+}
+document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => openPreview(b.dataset.mode));
+document.querySelectorAll('[data-region-action]').forEach(b => b.onclick = () => openPreview(b.dataset.regionAction + '-' + document.getElementById('region').value));
+document.getElementById('region').onchange = e => { document.querySelector('[data-region-action="return"]').disabled = e.target.value === 'mata'; };
+document.getElementById('travel').onclick = () => openPreview('travel');
+document.getElementById('skipTravel').onclick = () => frame.contentWindow.postMessage({ journeyPreview: 'skip-travel' }, location.origin);
+document.getElementById('advance').onclick = () => frame.contentWindow.postMessage({ journeyPreview: 'advance' }, location.origin);
+document.getElementById('interact').onclick = () => frame.contentWindow.postMessage({ journeyPreview: 'interact' }, location.origin);
+document.getElementById('reload').onclick = () => { if (lastSave) openPreview('saved', lastSave); };
+document.getElementById('immortal').onchange = e => frame.contentWindow.postMessage({ journeyPreview: 'immortal', value: e.target.checked }, location.origin);
+document.getElementById('memory').onchange = () => { if (['shelter','boss','decision','spare','purify'].includes(selected)) openPreview(selected); };
+addEventListener('message', e => {
+  if (e.source !== frame.contentWindow || e.origin !== location.origin || !e.data.journeyPreview) return;
+  if (e.data.journeyPreview === 'status') status.textContent = e.data.text;
+  if (e.data.journeyPreview === 'save') { lastSave = e.data.save; document.getElementById('reload').disabled = false; }
+  if (e.data.journeyPreview === 'error') document.getElementById('errors').textContent += e.data.text + '\n';
+});
+openPreview('amazonia').catch(e => { document.getElementById('errors').textContent = e.message; });
+</script>
+</body>
+</html>

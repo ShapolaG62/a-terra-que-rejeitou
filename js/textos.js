@@ -23,6 +23,9 @@ const REST_LINES = ['As histórias aquecem mais que o fogo.', 'Alguém, em algum
 
 // Lenda e invenção (diário)
 const NOTES = [
+  ['A ferida da mata', 'No mundo do jogo, as histórias mantêm os guardiões ligados aos lugares e às pessoas. O Corpo-seco cala essas vozes; os guardiões perdem suas lembranças e começam a ferir quem protegiam. O espírito pode aprender formas emprestadas com quem encontra pelo caminho.'],
+  ['A margem de Lia', 'Davi, Lia, Nina, a passarela e a cheia são personagens e acontecimentos fictícios deste jogo. Não representam uma comunidade ou uma tradição indígena específica.'],
+  ['Pessoas da jornada', 'Cecília, Bento, Rosa e Celina, suas lembranças e seus gestos cotidianos são criações do jogo. Os encontros não reproduzem práticas ou histórias de um povo específico.'],
   ['Mapinguari', 'Lenda da Amazônia: gigante peludo de um olho só, com boca na barriga e cheiro forte. A ligação dele com a memória é invenção do jogo.'],
   ['Capelobo', 'Lenda contada no Maranhão e no Pará: criatura de focinho comprido que ataca à noite. A arena em chamas é invenção do jogo.'],
   ['Pai do Mato', 'Protetor dos bichos e da mata em várias tradições do interior. O teste do pacto é invenção do jogo.'],

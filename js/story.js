@@ -37,7 +37,7 @@ function pickChoice(i) { if (!DQ || !DQ.choices || DQ.choices[i].disabled) retur
 function closeDialog() { DQ = null; UI.dialog = false; dEl.hidden = true; CONV.partner = null; }
 // Conversa com NPC (ou guardião): os dois aparecem grandes, o espírito à esquerda e quem conversa à direita;
 // quem está falando fica iluminado e mexe ao falar, o outro fica na sombra
-const RETRATO = { 'Caçador': 'cacador', 'Mestra da zarabatana': 'mestraA', 'Mestra do arco': 'arqueira', 'Velho canoeiro': 'canoeiro', 'Lanceira da cabaça': 'lanceira', 'Anciã das sementes': 'ancia', 'Anciã': 'ancia' };
+const RETRATO = { 'Cecília': 'arqueira', 'Bento': 'canoeiro', 'Rosa': 'lanceira', 'Celina': 'ancia', 'Davi': 'cacador', 'Lia': 'mestraA', 'Nina': 'nina', 'Caçador': 'cacador', 'Mestra da zarabatana': 'mestraA', 'Mestra do arco': 'arqueira', 'Velho canoeiro': 'canoeiro', 'Lanceira da cabaça': 'lanceira', 'Anciã das sementes': 'ancia', 'Anciã': 'ancia' };
 const RETRATO_BOSS = { 'Mapinguari': 'mapinguari', 'Capelobo': 'capelobo', 'Pai do Mato': 'paidomato', 'Labatut': 'labatut', 'Corpo-seco': 'corposeco' };
 const CONV = { partner: null, who: null, t0: 0, tw: 0 };
 const convC = document.createElement('canvas'); convC.width = 90; convC.height = 100;
@@ -67,7 +67,11 @@ function drawConversation() {
   ctx.globalAlpha = e;
   if (RETRATO[partner]) {
     convX.clearRect(0, 0, convC.width, convC.height);
-    drawHuman(convX, 45, 96 - (them ? talking : 0), -1, { kind: 'idle', t }, NPC[RETRATO[partner]]);
+    convX.save(); convX.translate(45, 96 - (them ? talking : 0));
+    const scale = partner === 'Nina' ? 0.76 : 1;
+    convX.scale(scale, scale);
+    drawHuman(convX, 0, 0, -1, { kind: 'idle', t }, NPC[RETRATO[partner]]);
+    convX.restore();
     ctx.drawImage(convC, rx - 135, base - 288, 270, 300);
   } else {
     const k = RETRATO_BOSS[partner], live = G.boss && G.boss.kind === k ? G.boss : null;
@@ -98,7 +102,11 @@ function dialogTick(dt) {
 }
 function wait(s) { return new Promise(res => G.waits.push({ t: s, res })); }
 function waitUntil(fn) { return new Promise(res => G.waits.push({ fn, res })); }
-async function scene(fn) { G.lock++; try { await fn(); } finally { G.lock = Math.max(0, G.lock - 1); closeDialog(); } }
+async function scene(fn) {
+  G.lock++; G.interact = null; $('#prompt').hidden = true;
+  $('#touch [data-a="interact"]').classList.remove('ready');
+  try { await fn(); } finally { G.lock = Math.max(0, G.lock - 1); closeDialog(); }
+}
 
 let toastT = null;
 function showToast(big, small, dur = 2.4) {
@@ -170,7 +178,7 @@ function drawHudFace() {
 function journalHTML() {
   const e = ECHO_ORDER.map(id => { const has = G.save.echoes.includes(id), E = ECHOES[id]; return `<div class="e ${has ? '' : 'no'}"><b>${has ? E.t : '???'}</b><span>${has ? E.x : 'Um eco ainda não encontrado.'}</span></div>`; }).join('');
   const n = NOTES.map(([t, x]) => `<div class="e"><b>${t}</b><span>${x}</span></div>`).join('');
-  return `<h2>Diário</h2><p>Ecos do Corpo-seco (${G.save.echoes.length}/6)</p><div class="journal">${e}</div>${caveJournalHTML()}<h2 style="margin-top:16px">Lenda e invenção</h2><div class="journal">${n}</div><div class="btns"><button class="btn" data-act="back">Voltar</button></div>`;
+  return `<h2>Diário</h2>${journeyJournalHTML()}<p>Ecos do Corpo-seco (${G.save.echoes.length}/6)</p><div class="journal">${e}</div>${caveJournalHTML()}<h2 style="margin-top:16px">Lenda e invenção</h2><div class="journal">${n}</div><div class="btns"><button class="btn" data-act="back">Voltar</button></div>`;
 }
 function keysHTML() {
   return `<h2>Controles</h2><div class="keys">
@@ -226,8 +234,8 @@ async function soundMenu() {
   for (;;) {
     const a = await menu(`<h2>Som</h2><div class="btns">
       <button class="btn" data-act="m">Som <small>${AU.on ? 'ligado' : 'desligado'}</small></button>
-      ${volHTML('vol', 'Volume geral')}${volHTML('mus', 'Música')}${volHTML('sfx', 'Efeitos e ações')}
-      <button class="btn" data-act="back">Voltar</button></div><p class="hint">Efeitos e ações: golpes, dano, passos, pulos, curas e interações.</p>`);
+      ${volHTML('vol', 'Volume geral')}${volHTML('mus', 'Música')}${volHTML('sfx', 'Efeitos e ambiente')}
+      <button class="btn" data-act="back">Voltar</button></div><p class="hint">Efeitos e ambiente: golpes, passos, pulos, interações, vento, água e sons da mata.</p>`);
     if (a === 'm') { audioInit(); setSound(!AU.on); continue; }
     break;
   }
@@ -264,16 +272,28 @@ const CARDS = [
   ['Ato V', 'Mata Atlântica', 'O Corpo-seco', 'A primeira a cair. Foi aqui que tudo começou.'],
   ['Final', 'O coração da mata', '', 'Abrir mão.'],
 ];
-// passagem entre regiões: guarda a imagem da cena atual; ela desliza para fora enquanto a nova região já aparece
+// A passagem dissolve o cenário no mesmo lugar; a chegada mantém o corpo em movimento.
 const transC = document.createElement('canvas'); transC.width = W; transC.height = H;
 function snapshotScene() { transC.getContext('2d').drawImage(cv, 0, 0); }
-function startSlide() { G.trans = { t0: G.rt, dur: 1.1 }; }
+function captureTravelArrival(A, B, from, to, card, form) {
+  // Não desenha o quadro sem personagem no canvas visível, nem por um único frame.
+  const visible = ctx, offscreen = transC.getContext('2d');
+  ctx = offscreen; offscreen.save();
+  try {
+    offscreen.imageSmoothingEnabled = false; offscreen.clearRect(0, 0, W, H); offscreen.translate(0, DY);
+    drawTravel(1, VIAGEM_DUR, A, B, from, to, card, form, true);
+  } finally { offscreen.restore(); ctx = visible; }
+}
+function startBlend(kind = 'scene', dur = 0.65) { G.trans = { t0: G.rt, dur, kind }; }
 function drawTransition() {
-  const k = (G.rt - G.trans.t0) / G.trans.dur;
+  const transition = G.trans, k = clamp((G.rt - transition.t0) / transition.dur, 0, 1);
   if (k >= 1) { G.trans = null; return; }
-  const e = k * k * (3 - 2 * k), ox = -Math.round(e * W);
-  ctx.globalAlpha = 1 - e * 0.35; ctx.drawImage(transC, ox, 0); ctx.globalAlpha = 1;
-  ctx.globalAlpha = 0.25 * (1 - e); rect(ctx, ox + W - 1, 0, 2, H, '#f4ecd8'); ctx.globalAlpha = 1; // brilho na emenda
+  const e = k * k * (3 - 2 * k);
+  ctx.globalAlpha = 1 - e; ctx.drawImage(transC, 0, 0); ctx.globalAlpha = 1;
+  // A captura de chegada não contém o espírito: há um único corpo, já na fase jogável.
+  if (transition.kind === 'arrival' && G.P) {
+    ctx.save(); ctx.translate(-Math.round(G.cam.x), DY); drawPlayer(G.P, G.t); ctx.restore();
+  }
 }
 // ---------- Cutscene de viagem entre biomas ----------
 // O espírito atravessa a paisagem correndo: o bioma de onde sai se dissolve no próximo (céu, fundo, chão e árvores),
@@ -291,7 +311,17 @@ async function travelScene(from, to, card) {
   G.sceneDraw = () => drawTravel(Math.min(1, (G.rt - t0) / dur), G.rt - t0, A, B, from, to, card, form);
   await waitUntil(() => skip || G.rt - t0 > dur || (G.rt - t0 > 1 && (I.pressed.confirm || I.pressed.jump || I.pressed.pause || I.pressed.attack || I.pressed.interact)));
   stage.removeEventListener('pointerdown', onTap);
-  snapshotScene(); G.sceneDraw = null;   // o último quadro da viagem desliza para a fase nova
+  const elapsed = Math.min(dur, G.rt - t0);
+  if (elapsed < dur) {
+    // Pular a viagem acelera o trecho final, chegando à paisagem de destino.
+    const finishT = G.rt;
+    G.sceneDraw = () => { const p = clamp((G.rt - finishT) / 0.3, 0, 1), t = lerp(elapsed, dur, 1 - (1 - p) ** 3); drawTravel(t / dur, t, A, B, from, to, card, form); };
+    await wait(0.3);
+  }
+  // Captura exata do destino, sem personagem ou letreiros, para a dissolução estacionária.
+  captureTravelArrival(A, B, from, to, card, form);
+  G.sceneDraw = null;
+  G.arrivalSeed = { to, form, ph: dur * VIAGEM_VEL * 0.22 };
 }
 // cenário da viagem: um trecho de mundo com as peças do jogo (chão, copas, troncos, cipós, samambaias, tronco caído);
 // até Xb é o bioma de saída, depois o de chegada. Gerado uma vez por par de biomas.
@@ -322,7 +352,7 @@ function caveCeiling(x0, x1, mouth, dir, t) {
     if (ramp > 0.9 && hash(x * 7) < 0.05) { const len = 12 + hash(x * 11) * 34; vineStrand(x, top + h - 2, len, P, t, x, true); }
   }
 }
-function drawTravel(k, tt, A, B, from, to, card, form) {
+function drawTravel(k, tt, A, B, from, to, card, form, hideHero = false) {
   const V = travelWorld(from, to), cam = Math.round(tt * VIAGEM_VEL), top = -DY, bot = H - DY;
   const heroX = cam + VIAGEM_PX, e0 = clamp((heroX - (V.Xb - 70)) / 140, 0, 1), e = e0 * e0 * (3 - 2 * e0);
   // fundo: o céu e as camadas do bioma de saída cedem para o de chegada quando o espírito cruza a fronteira
@@ -348,14 +378,16 @@ function drawTravel(k, tt, A, B, from, to, card, form) {
   // o espírito correndo com a forma que está usando (e a chama do fogo frio, se já tiver)
   const dh = heroX - V.hopX + 34, air = dh > 0 && dh < 52, jy = air ? Math.round(-Math.sin(dh / 52 * Math.PI) * 22) : 0;
   const px = heroX, py = GY + jy;
-  if (form === 'espirito') { ctx.globalAlpha = 0.15; ell(ctx, px, py - 13, 12, 16, '#8a7ab0'); ctx.globalAlpha = 1; }
-  // riscos de vento passando pelo corpo (dá a sensação de velocidade)
-  for (let i = 0; i < 5; i++) { const p = (tt * 2.2 + i * 0.37) % 1, wy = py - 8 - (i * 9) % 34; ctx.globalAlpha = 0.35 * Math.sin(p * Math.PI); rect(ctx, px + 14 - p * 46, wy, 8 + (i % 3) * 4, 1, '#f4ecd8'); }
-  ctx.globalAlpha = 1;
-  drawHuman(ctx, px, py, 1, air ? { kind: dh < 26 ? 'jump' : 'fall' } : { kind: 'run', ph: tt * 11, t: tt }, playerSpec(form));
-  if (G.save.cold) drawSparkle(ctx, px - 16, py - 36 + Math.sin(tt * 2.5) * 2, tt, '#bfe4ff');
-  if (!air) for (let i = 0; i < 4; i++) { const p = (tt * 3 + i / 4) % 1; ctx.globalAlpha = 0.5 * (1 - p); rect(ctx, px - 8 - p * 22, GY - 2 - p * 4, 2, 1, biome(V.bio(px)).ground.top); }
-  ctx.globalAlpha = 1;
+  if (!hideHero) {
+    if (form === 'espirito') { ctx.globalAlpha = 0.15; ell(ctx, px, py - 13, 12, 16, '#8a7ab0'); ctx.globalAlpha = 1; }
+    // riscos de vento passando pelo corpo (dá a sensação de velocidade)
+    for (let i = 0; i < 5; i++) { const p = (tt * 2.2 + i * 0.37) % 1, wy = py - 8 - (i * 9) % 34; ctx.globalAlpha = 0.35 * Math.sin(p * Math.PI); rect(ctx, px + 14 - p * 46, wy, 8 + (i % 3) * 4, 1, '#f4ecd8'); }
+    ctx.globalAlpha = 1;
+    drawHuman(ctx, px, py, 1, air ? { kind: dh < 26 ? 'jump' : 'fall' } : { kind: 'run', ph: tt * VIAGEM_VEL * 0.22, t: tt }, playerSpec(form));
+    if (G.save.cold) drawSparkle(ctx, px - 16, py - 36 + Math.sin(tt * 2.5) * 2, tt, '#bfe4ff');
+    if (!air) for (let i = 0; i < 4; i++) { const p = (tt * 3 + i / 4) % 1; ctx.globalAlpha = 0.5 * (1 - p); rect(ctx, px - 8 - p * 22, GY - 2 - p * 4, 2, 1, biome(V.bio(px)).ground.top); }
+    ctx.globalAlpha = 1;
+  }
   // samambaias de primeiro plano passando na frente
   for (const f of V.ferns) if (f.front && vis(f.x)) fern(ctx, f.x, GY + 3, tpal(f.b), seeded(f.seed), f.s * 1.3);
   ctx.restore();
@@ -418,7 +450,7 @@ function drawTravel(k, tt, A, B, from, to, card, form) {
   rect(ctx, Math.round(mx) - 1, ry - 6 + Math.round(Math.sin(tt * 8)), 3, 3, '#bfe4ff'); rect(ctx, Math.round(mx), ry - 7 + Math.round(Math.sin(tt * 8)), 1, 1, '#ffffff');
   drawPx(ROTA_NOME[from] || '', x0 + i0 * step, ry + 4, { align: 'center', col: '#c8b8a0', col2: '#9a8a74' });
   drawPx(ROTA_NOME[to] || '', x0 + i1 * step, ry + 4, { align: 'center', col: '#fff4dc', col2: '#e0c890' });
-  if (tt > 1) { ctx.globalAlpha *= 0.85; drawPx(L.touch ? 'toque para pular' : 'Enter: pular', W - 6, top + lb - 16, { align: 'right', col: '#b8a88a', col2: '#8a7a6a' }); }
+  if (tt > 1 && k < 0.93) { ctx.globalAlpha *= 0.85; drawPx(L.touch ? 'toque para pular' : 'Enter: pular', W - 6, top + lb - 16, { align: 'right', col: '#b8a88a', col2: '#8a7a6a' }); }
   ctx.globalAlpha = 1; ctx.textAlign = 'left';
 }
 async function enterAct(n, o = {}) {
@@ -431,19 +463,30 @@ async function enterAct(n, o = {}) {
   let x = G.lvl.start;
   const F = G.save.fire && G.save.fire.lvl === G.lvl.id ? G.save.fire : null;
   if (F) x = F.x;
-  for (const t of G.lvl.triggers) if (t.x < x - 10 && !t.always) t.done = true;
+  const arrival = o.smooth && !F && G.arrivalSeed && G.arrivalSeed.to === lvl ? G.arrivalSeed : null;
+  G.arrivalSeed = null;
+  if (arrival) x = VIAGEM_PX - 5;
+  if (!arrival) for (const t of G.lvl.triggers) if (t.x < x - 10 && !t.always) t.done = true;
   G.P = makePlayer(x, groundY(x));
   G.P.form = n === 0 ? 'espirito' : (G.save.forms.includes(G.save.form) ? G.save.form : G.save.forms[G.save.forms.length - 1]);
   // vindo do mapa anterior: entra caminhando pela borda esquerda enquanto a tela clareia
-  const walkIn = o.walkIn && !F;
+  const walkIn = !arrival && o.walkIn && !F;
   if (walkIn) { G.P.x = Math.max(2, x - 46); G.P.f = 1; G.auto = 1; G.lock++; }
+  if (arrival) {
+    G.P.form = arrival.form; G.P.ph = arrival.ph; G.P.vx = VIAGEM_VEL; G.P.onG = true;
+    G.auto = 1; G.lock++; G.arriving = true;
+  }
   G.cam.x = clamp(G.P.x - W / 2, 0, G.lvl.w - W);
+  G.cam.shake = 0;
   G.state = 'play'; $('#hud').hidden = false; updateHudForm(); hud.cache = {};
-  if (o.smooth) { startSlide(); if (!o.noToast) showToast(card[0] + ' · ' + card[1], card[3] || card[2], 3.2); }
-  if (walkIn) { const t0 = G.rt; fade(false); await waitUntil(() => G.P.x >= x || G.rt - t0 > 1.6); G.auto = 0; G.lock--; } else await fade(false);
-  if (G.lvl.onStart) scene(G.lvl.onStart);
+  if (o.smooth) { startBlend(arrival ? 'arrival' : 'scene'); if (!o.noToast) showToast(card[0] + ' · ' + card[1], card[3] || card[2], 3.2); }
+  if (arrival) {
+    $('#fade').classList.remove('on', 'white');
+    try { await wait(0.65); } finally { G.auto = 0; G.lock = Math.max(0, G.lock - 1); G.arriving = false; }
+  } else if (walkIn) { const t0 = G.rt; fade(false); await waitUntil(() => G.P.x >= x || G.rt - t0 > 1.6); G.auto = 0; G.lock--; } else await fade(false);
+  if (G.lvl.onStart) await scene(G.lvl.onStart);
 }
-// sai caminhando para a direita (as paredes da arena caem); a cena fica guardada para deslizar na troca de região
+// Sai caminhando; a captura conduz à paisagem da viagem.
 async function walkOut() {
   if (G.P && G.state === 'play') {
     G.lvl.solids = G.lvl.solids.filter(s => !s.arenaWall); closeDialog();
@@ -459,7 +502,7 @@ async function enterGruta() {
   G.save.sub = 'gruta'; G.save.fire = null; G.save.drop = null; writeSave();
   hud.boss.hidden = true;
   await travelScene(from, 'gruta', GRUTA_CARD);
-  enterAct(G.save.act, { walkIn: true, smooth: true, noToast: true });
+  return enterAct(G.save.act, { walkIn: true, smooth: true, noToast: true });
 }
 async function nextAct() {
   await walkOut();
@@ -468,7 +511,7 @@ async function nextAct() {
   hud.boss.hidden = true;
   const to = homeLevel(G.save.act);
   await travelScene(from, to, to === 'gruta' ? GRUTA_CARD : CARDS[G.save.act]);
-  enterAct(G.save.act, { walkIn: true, smooth: true, noToast: true });
+  return enterAct(G.save.act, { walkIn: true, smooth: true, noToast: true });
 }
 function grantForm(f) {
   if (!G.save.forms.includes(f)) G.save.forms.push(f);
@@ -485,9 +528,14 @@ function interactables() {
   const P = G.P, L2 = G.lvl, out = [];
   const add = (x, y, label, fn) => out.push({ x, y, label, fn });
   for (const n of L2.npcs) if (!n.hidden && n.talk) add(n.x, groundY(n.x, n.y0 || 0), 'Conversar', () => scene(n.talk));
-  for (const f of L2.fires) add(f.x, groundY(f.x), !G.save.lit[f.id] ? 'Acender a fogueira' : 'Fogueira', () => restAt(f));
+  for (const f of L2.fires) {
+    const company = journeyFireAction(f);
+    const localCompany = typeof companionFireAction === 'function' && companionFireAction(f);
+    add(f.x, groundY(f.x), company ? 'Sentar com Lia e Nina' : localCompany ? 'Sentar com ' + COMPANIONS[L2.id].who : !G.save.lit[f.id] ? 'Acender a fogueira' : 'Fogueira', () => company ? scene(journeyCamp) : localCompany ? scene(() => companionCamp(L2.id)) : restAt(f));
+  }
   for (const c of L2.chests) if (!G.save.opened[c.id] && (!c.need || gateOpen(c.need))) add(c.x, c.y, 'Abrir', () => openChest(c));
   caveInteractables(add);
+  journeyInteractables(add);
   if (P && P.state === 'normal') { const v = nearVine(P); if (v) add(P.x + 5, P.y + P.h, 'Agarrar cipó', () => grabVine(v)); }
   if (L2.echoAt && L2.echoAt.id !== 'engenho') add(L2.echoAt.x, L2.echoAt.y, G.save.echoes.includes(L2.echoAt.id) ? 'Lembrar de novo' : 'Lembrar', () => scene(() => remember(L2.echoAt.id)));
   return out;
@@ -540,6 +588,7 @@ function restAt(f) {
   });
 }
 function checkTriggers() {
+  if (G.arriving) return;
   const px = G.P.x + 5;
   for (const t of G.lvl.triggers) if (!t.done && px > t.x) { t.done = true; scene(t.fn); }
 }
@@ -556,7 +605,7 @@ function startBoss() {
   musicSet('boss'); hud.cache = {};
   const D = BOSSES[A.boss];
   showToast(D.nome, D.sub, 2.8); SFX.roar(); G.cam.shake = 4;
-  const intro = BOSS_INTRO[A.boss];
+  const intro = A.boss === 'mapinguari' ? journeyBossIntro() : BOSS_INTRO[A.boss];
   if (intro && !G.save.seen[A.boss]) { G.save.seen[A.boss] = 1; writeSave(); B.tt = 99; scene(async () => { await wait(0.8); await talk(intro); B.tt = 0.3; }); }
 }
 function resetArena() {
@@ -599,7 +648,8 @@ function respawn() {
 // ---------- Fases ----------
 const NPC = {
   cacador: npcSpec('zarabatana', { weapon: 'blowgun' }),
-  mestraA: npcSpec('zarabatana', { hair: '#3a3430', acc: 'crown', bottom: { col: '#6a3e22', len: 6, hem: '#a8744a' } }),
+  mestraA: npcSpec('zarabatana', { weapon: null, hair: '#3a3430', acc: 'crown', bottom: { col: '#6a3e22', len: 6, hem: '#a8744a' } }),
+  nina: npcSpec('zarabatana', { weapon: null, acc: null, hair: '#201b17', bottom: { col: '#875132', len: 6, hem: '#c69b65' } }),
   arqueira: npcSpec('arco'),
   canoeiro: npcSpec('lanca'),
   lanceira: npcSpec('cabaca'),
@@ -625,7 +675,7 @@ const LEVELS = {
       G.save.seen.prolEvent = 1;
       G.camTarget = 1100;
       await wait(0.6);
-      await talk([['', 'Um grito corta a mata.'], ['Caçador', 'Para! Você sempre protegeu a gente!'], ['Espírito', 'Um guardião... atacando quem sempre protegeu.'], ['Espírito', 'A Lei antiga diz que a mata não luta contra os seus.'], ['Espírito', 'Mas se o guardião ataca o próprio povo, o pacto já foi quebrado pelo outro lado.']]);
+      await talk([['', 'Um grito corta a mata.'], ['Davi', 'Para! Você sempre protegeu a gente!'], ['Espírito', 'Davi!'], ['Espírito', 'A Lei antiga diz que a mata não luta contra os seus. Mas ele não está reconhecendo ninguém.']]);
       await choose('', [{ label: 'Romper a Lei', sub: 'lutar para libertar, não para destruir' }]);
       closeDialog(); G.flash = 0.4; G.flashCol = '#f4ecd8'; SFX.boom(); showToast('A Lei foi rompida', 'lutar é um ato de amor, não de ódio', 2.6);
       G.camTarget = null;
@@ -870,16 +920,9 @@ const STORY = {
       G.boss = null; A.cleared = true; resetArena();
       G.auto = 1; await waitUntil(() => G.P.x > 1360); G.auto = 0; G.P.f = 1;
       const n = G.lvl.npcs[0]; n.anim = 'idle';
-      await talk([
-        ['Caçador', 'Seus olhos... minha avó contava de um espírito que não tinha corpo.'],
-        ['Caçador', 'Que pegava emprestado o jeito de quem vive na mata, e assim lembrava quem era.'],
-        ['Caçador', 'Se você não tem forma, leva a nossa. Leva o sopro da zarabatana.'],
-      ]);
-      grantForm('zarabatana');
-      await wait(1);
-      await talk([['Caçador', 'Lá no fundo da floresta, o grande guardião anda furioso. Derruba as árvores que ele mesmo guardava.'], ['Caçador', 'Vai. A gente conta a sua história enquanto isso.']]);
-      return nextAct();
+      return journeyPrologueGift();
     }
+    if (k === 'mapinguari') return journeyMapinguariDown(B);
     const pre = {
       mapinguari: [['Mapinguari', '...a floresta... ninguém... canta mais...']],
       capelobo: [['Capelobo', '...sede... tanta sede...']],
@@ -922,6 +965,7 @@ const STORY = {
       labatut: 'Você lembra: o custo real do esquecimento não é morrer. É não saber mais quem se é.',
     }[k];
     SFX.echo(); await talk([['', lesson]]);
+    const returnTo = typeof prepareCompanionReturn === 'function' ? prepareCompanionReturn(k) : null;
     // o guardião se desfaz em memória: luz subindo enquanto some
     for (let i = 0; i < 36; i++) {
       B.alpha = 1 - i / 36;
@@ -930,6 +974,7 @@ const STORY = {
     }
     G.flash = 0.3; G.flashCol = '#f4ecd8'; SFX.echo();
     G.boss = null; A.cleared = true;
+    if (returnTo) return companionReturn(returnTo);
     if (k === 'capelobo') return enterGruta();
     return nextAct();
   },
@@ -992,6 +1037,7 @@ const STORY = {
   async offer() {
     G.auto = 0;
     G.P.fadeA = 1;
+    if (typeof companionFinalMemory === 'function') await talk(companionFinalMemory());
     await talk([['', 'Diante do coração, tudo o que você acumulou se ergue de volta. A força de cada guardião. O jeito de cada povo.'], ['', 'Pode ser seu. Para sempre.']]);
     let tries = 0;
     for (;;) {
@@ -1122,9 +1168,7 @@ async function startGame(fresh) {
   musicSet('theme');
   G.state = 'card';
   if (fresh) {
-    await showCard('', 'Antes da ferida', '', 'A mata funcionava por um pacto. O Espírito da Mata e os guardiões cuidavam do equilíbrio. Os povos faziam a outra metade: contavam as histórias, cantavam, plantavam e respeitavam os limites.', 1.2);
-    await showCard('', 'Os guardiões existiam porque eram lembrados', '', 'Cada história contada era uma raiz que os mantinha firmes.', 1);
-    await showCard('', 'A ferida', '', 'Um homem tão cruel e ganancioso que a terra se recusou a recebê-lo. Ele não morre nem apodrece. Seca rios, queima mata, cala vozes. E descobriu que, se os povos são silenciados, as histórias se apagam — e os guardiões enlouquecem.', 1.4);
+    await showCard('', 'Uma brasa ainda acesa', '', 'Um assobio atravessa a mata. Há alguém cuidando do fogo.', 0.8);
   }
   enterAct(G.save.act);
 }
@@ -1141,6 +1185,7 @@ function update(dt) {
   G.t += dt;
   if (G.hitstop > 0) { G.hitstop -= dt; return; }
   updatePlatforms();
+  updateJourney(dt);
   updatePlayer(dt);
   updateEnemies(dt);
   updateBoss(dt);
@@ -1156,7 +1201,7 @@ function update(dt) {
 let last = 0;
 function frame(ts) {
   const dt = Math.min(0.05, (ts - last) / 1000 || 0.016); last = ts;
-  pollInput(); musicTick();
+  pollInput(); musicTick(); journeyAmbience(dt);
   if (I.pressed.debug) G.debug = !G.debug;
   G.rt += dt;
   for (const w of G.waits.slice()) { if (w.fn ? w.fn() : (w.t -= (UI.dialog || UI.menu ? 0 : dt)) <= 0) { G.waits.splice(G.waits.indexOf(w), 1); w.res(); } }

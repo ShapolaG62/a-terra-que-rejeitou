@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prévia do Mapinguari</title>
+<style>
+  :root { color-scheme:dark; font:15px/1.45 system-ui,sans-serif; background:#0b1110; color:#e7e8d6; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:26px 18px 40px; }
+  main { max-width:1000px; margin:auto; }
+  header { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:17px; }
+  .eyebrow { margin:0 0 5px; color:#a5b77a; font-size:11px; font-weight:700; letter-spacing:.15em; text-transform:uppercase; }
+  h1 { margin:0; font-size:clamp(25px,5vw,37px); line-height:1.1; }
+  header p { margin:6px 0 0; color:#a6afa1; font-size:13px; }
+  a { color:#d7c27d; }
+  button, select { font:inherit; color:inherit; background:#19231d; border:1px solid #3e4b39; border-radius:7px; padding:9px 13px; }
+  button { cursor:pointer; }
+  button:hover, button:focus-visible, select:focus-visible { border-color:#cfb873; outline:none; background:#263426; }
+  button[aria-pressed="true"] { background:#34402c; border-color:#d5bb73; color:#fff0c6; }
+  .screen { position:relative; border:1px solid #3d4b38; border-radius:12px; overflow:hidden; background:#101810; box-shadow:0 18px 60px #0005; }
+  #stage { position:relative; width:100%; aspect-ratio:16/9; overflow:hidden; touch-action:none; }
+  #cv { display:block; width:100%; height:100%; image-rendering:pixelated; }
+  #float { position:absolute; inset:0; pointer-events:none; }
+  .hud { position:absolute; z-index:1; left:15px; top:13px; display:flex; flex-direction:column; gap:3px; pointer-events:none; text-shadow:1px 1px #000; }
+  .hud strong { font-size:12px; letter-spacing:.1em; }
+  .hud small { font-size:11px; color:#d2d9bc; }
+  .bar { height:5px; width:170px; background:#050a06aa; border:1px solid #071008; }
+  .bar i { display:block; height:100%; background:#c9ae66; }
+  .bar.st i { background:#90ab67; }
+  .boss-hud { left:auto; right:15px; align-items:flex-end; }
+  #pausedNotice { position:absolute; inset:0; display:grid; place-items:center; font-weight:700; letter-spacing:.15em; background:#05100838; pointer-events:none; text-shadow:0 2px #000; }
+  [hidden] { display:none!important; }
+  .toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:14px 0 12px; }
+  .toolbar label { display:flex; align-items:center; gap:7px; margin-left:auto; color:#b6c2ac; }
+  .toolbar input { accent-color:#cfb873; }
+  .readout { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; padding:12px 15px; background:#111b16; border:1px solid #29362b; border-radius:8px; }
+  #currentState { color:#ecd69b; font-weight:600; }
+  #stats { font-size:13px; color:#b5bfa9; }
+  .help { margin:13px 0 0; color:#a7b29f; font-size:13px; }
+  kbd { font:inherit; color:#e6d3a0; padding:1px 4px; border:1px solid #46533c; border-radius:3px; background:#17221a; }
+  .note { margin:8px 0 0; color:#788b79; font-size:12px; }
+  @media (max-width:650px) {
+    body { padding:18px 10px 28px; }
+    header { align-items:flex-start; }
+    header a { font-size:12px; white-space:nowrap; }
+    .toolbar { gap:6px; }
+    button, select { font-size:13px; padding:8px 10px; }
+    .toolbar label { margin-left:0; }
+    .hud { left:9px; top:8px; }
+    .boss-hud { left:auto; right:9px; }
+    .bar { width:105px; }
+    .hud strong, .hud small { font-size:9px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="eyebrow">Arena de desenvolvimento</p><h1>Mapinguari</h1><p>Teste a aparência, os avisos e os impactos de cada ataque.</p></div>
+    <a href="../index.html">Abrir o jogo ↗</a>
+  </header>
+  <div class="screen">
+    <div id="stage" tabindex="0" aria-label="Arena interativa do Mapinguari">
+      <canvas id="cv" width="432" height="243"></canvas>
+      <div id="float"></div>
+      <div class="hud"><strong>CAÇADOR</strong><div class="bar st"><i id="playerSt"></i></div><small id="playerHp"></small></div>
+      <div class="hud boss-hud"><strong>MAPINGUARI</strong><div class="bar"><i id="bossHp"></i></div><small id="bossPhase"></small></div>
+      <div id="pausedNotice" hidden>PAUSADO</div>
+    </div>
+  </div>
+  <div class="toolbar" aria-label="Demonstrações de ataque">
+    <button type="button" data-demo="idle" aria-pressed="true">Aparência</button>
+    <button type="button" data-demo="clawW" aria-pressed="false">Garras</button>
+    <button type="button" data-demo="slamW" aria-pressed="false">Pancada</button>
+    <button type="button" data-demo="gasW" aria-pressed="false">Sopro</button>
+    <button type="button" data-demo="biteW" aria-pressed="false">Mordida</button>
+    <button type="button" data-demo="chargeW" aria-pressed="false">Investida</button>
+    <button type="button" data-demo="roar" aria-pressed="false">Rugido</button>
+    <button type="button" data-demo="free" aria-pressed="false">IA livre</button>
+    <select id="phase" aria-label="Fase do Mapinguari"><option value="1">Fase 1</option><option value="2">Fase 2</option></select>
+    <button type="button" id="pause" aria-pressed="false">Pausar</button>
+    <label><input type="checkbox" id="immortal">Imortal</label>
+  </div>
+  <div class="readout" aria-live="off"><span id="currentState">Respirando</span><span id="stats"></span></div>
+  <p class="help"><kbd>A</kbd> <kbd>D</kbd> ou setas: mover · <kbd>W</kbd> / <kbd>Espaço</kbd>: pular · <kbd>Shift</kbd> / <kbd>C</kbd>: dash · <kbd>J</kbd>: golpe · <kbd>K</kbd>: tiro · <kbd>U</kbd>: especial · <kbd>P</kbd> / <kbd>Esc</kbd>: pausar.</p>
+  <p class="note">Os botões reiniciam a demonstração e repetem o ataque escolhido. O jogador começa com 10.000 de vida. Esta prévia não grava progresso ou preferências.</p>
+</main>
+<audio id="music" preload="none" hidden></audio>
+<div id="dialog" hidden></div><div id="rotate" hidden></div>
+<script src="../js/core.js"></script>
+<script src="../js/itens.js"></script>
+<script src="../js/art.js"></script>
+<script src="../js/tiles.js"></script>
+<script src="../js/fauna.js"></script>
+<script src="../js/world.js"></script>
+<script src="../js/bosses.js"></script>
+<script src="../js/beasts.js"></script>
+<script>
+'use strict';
+const PREVIEW = { mode: 'idle', phase: 1, paused: false, dirty: true, messages: [] };
+const LABELS = {
+  intro: 'O guardião desperta', idle: 'Respirando', walk: 'Avançando',
+  clawW: 'Preparando a varrida de garras', claw: 'Varrida de garras',
+  slamW: 'Preparando a pancada', slam: 'Pancada e ondas de terra',
+  gasW: 'Preparando o sopro', gas: 'Sopro de gás',
+  biteW: 'Preparando a mordida', bite: 'Mordida da barriga',
+  chargeW: 'Preparando a investida', charge: 'Investida',
+  roar: 'A mata ruge', dazed: 'Tonto — janela de contra-ataque', rec: 'Recuperando o fôlego', down: 'Guardião vencido',
+};
+
+// Esta página usa um save novo apenas na memória, sem carregar ou gravar o progresso.
+writeSave = () => {};
+clearSave = () => {};
+function onBossDown() { PREVIEW.messages.push({ x: W / 2, y: 30, text: 'Guardião vencido — escolha outra demonstração', col: '#e7cd91', life: 3 }); }
+function die() { G.P.hp = 10000; G.P.state = 'normal'; G.P.inv = 1; }
+function floatText(x, y, text, col = '#e7cd91') { PREVIEW.messages.push({ x, y, text, col, life: 1.1 }); }
+function showToast(title, sub = '') { floatText(W / 2, 30, title + (sub ? ' · ' + sub : '')); }
+function updateHudForm() {}
+
+function previewLayout() {
+  stage.style.cssText = '';
+  const r = stage.getBoundingClientRect();
+  Object.assign(L, { s: r.width / W, x: r.left, y: r.top, w: r.width, h: r.height, portrait: false, touch: false });
+}
+removeEventListener('resize', layout);
+layout = previewLayout;
+addEventListener('resize', previewLayout);
+
+function prepareAttack(B) {
+  const durations = { biteW: 0.72, clawW: 0.86, slamW: B.phase === 2 ? 0.94 : 1.08, gasW: 1, chargeW: 1.1 };
+  B.f = Math.sign(G.P.x + 5 - B.x) || -1;
+  B.last = PREVIEW.mode;
+  if (PREVIEW.mode === 'idle' || PREVIEW.mode === 'roar') go(B, 'idle', 999);
+  else if (PREVIEW.mode === 'free') go(B, 'idle', 0.45);
+  else go(B, PREVIEW.mode, durations[PREVIEW.mode]);
+}
+
+function resetDemo(mode = PREVIEW.mode) {
+  PREVIEW.mode = mode;
+  if (mode === 'roar') { PREVIEW.phase = 2; $('#phase').value = '2'; }
+  G.save = newSave(); G.save.act = 1; G.save.forms = ['espirito', 'zarabatana']; G.save.form = 'zarabatana';
+  G.state = 'play'; G.lock = 0; G.hitstop = 0; G.heat = 0; G.auto = 0; G.flags = {}; G.cam = { x: 0, y: -DY, shake: 0 };
+  G.lvl = LV({ id: 'preview', w: W, biome: 'amazonia', act: 1, name: 'Arena do Mapinguari', start: 95 }).g(-30, W + 30).ar(0, 'mapinguari');
+  G.lvl.arena.active = true;
+  G.lvl.solids.push({ x: -20, y: -150, w: 20, h: 450, t: 'g', wall: true }, { x: W, y: -150, w: 20, h: 450, t: 'g', wall: true });
+  G.ents = []; G.hazards = []; G.parts = []; G.bfx = []; G.projs = []; PREVIEW.messages = [];
+  G.P = makePlayer(110, GY); G.P.form = 'zarabatana'; G.P.f = 1; G.P.onG = true; G.P.plat = G.lvl.solids[0];
+  G.P.hp = 10000; G.P.hpMax = () => 10000;
+  G.boss = makeBoss('mapinguari', 300); G.boss.phase = PREVIEW.phase;
+  if (PREVIEW.phase === 2) G.boss.hp = Math.floor(G.boss.hpMax * 0.49);
+  prepareAttack(G.boss);
+  if (mode === 'roar') { G.boss.phase = 1; go(G.boss, 'idle', 0); }
+  for (const button of document.querySelectorAll('[data-demo]')) button.setAttribute('aria-pressed', String(button.dataset.demo === mode));
+  PREVIEW.dirty = true;
+}
+
+function togglePause() {
+  PREVIEW.paused = !PREVIEW.paused;
+  $('#pause').textContent = PREVIEW.paused ? 'Retomar' : 'Pausar';
+  $('#pause').setAttribute('aria-pressed', String(PREVIEW.paused));
+  $('#pausedNotice').hidden = !PREVIEW.paused;
+  PREVIEW.dirty = true;
+}
+
+function drawPreview() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.save(); ctx.translate(0, DY);
+  const background = biome('amazonia');
+  drawBackground(background, 0, G.t);
+  const shake = G.cam.shake;
+  if (shake) ctx.translate(Math.round(Math.sin(G.t * 83) * shake * 0.5), Math.round(Math.cos(G.t * 71) * shake * 0.35));
+  drawGroundSolid(G.lvl.solids[0], 'amazonia', 0);
+  for (const hazard of G.hazards) if (hazard.kind !== 'mapGas') (HZ[hazard.kind] || hazard).draw(hazard);
+  drawBoss(G.boss); drawBossFx(); drawMapinguariFx();
+  drawPlayer(G.P, G.t);
+  for (const projectile of G.projs) drawProj(projectile);
+  for (const hazard of G.hazards) if (hazard.kind === 'mapGas') hazard.draw(hazard);
+  for (const particle of G.parts) {
+    ctx.globalAlpha = Math.min(1, particle.life / particle.max);
+    rect(ctx, particle.x, particle.y, particle.s, particle.s, particle.col);
+  }
+  ctx.globalAlpha = 1;
+  ctx.font = '5px monospace'; ctx.textAlign = 'center';
+  for (const message of PREVIEW.messages) {
+    ctx.globalAlpha = Math.min(1, message.life * 2); ctx.fillStyle = message.col;
+    ctx.fillText(message.text, message.x, message.y - (1.1 - Math.min(1.1, message.life)) * 12);
+  }
+  ctx.globalAlpha = 1; ctx.restore();
+  $('#playerSt').style.width = Math.max(0, G.P.st / G.P.stMax() * 100) + '%';
+  $('#bossHp').style.width = Math.max(0, G.boss.hp / G.boss.hpMax * 100) + '%';
+  $('#playerHp').textContent = Math.ceil(G.P.hp).toLocaleString('pt-BR') + ' de vida';
+  $('#bossPhase').textContent = 'Fase ' + G.boss.phase + ' · ' + Math.max(0, Math.ceil(G.boss.hp)) + ' de vida';
+  $('#currentState').textContent = LABELS[G.boss.st] || G.boss.st;
+  $('#currentState').dataset.state = G.boss.st;
+  $('#stats').textContent = G.hazards.length + ' perigos ativos · ' + G.parts.length + ' partículas';
+}
+
+let previousTime = 0;
+function frame(ts) {
+  const dt = Math.min(0.035, (ts - previousTime) / 1000 || 1 / 60); previousTime = ts;
+  pollInput();
+  if (I.pressed.pause) togglePause();
+  if (!PREVIEW.paused) {
+    G.t += dt; G.rt += dt;
+    if (G.hitstop > 0) G.hitstop = Math.max(0, G.hitstop - dt);
+    else {
+      if ($('#immortal').checked) G.P.inv = 1;
+      if (G.boss.st === 'idle' && G.boss.tt <= dt * DIFF.bossSpeed && PREVIEW.mode !== 'free') prepareAttack(G.boss);
+      updatePlayer(dt); updateBoss(dt); updateHazards(dt); updateProjs(dt); updateParts(dt);
+    }
+    G.cam.shake = Math.max(0, G.cam.shake - dt * 18);
+    for (const message of PREVIEW.messages) message.life -= dt;
+    PREVIEW.messages = PREVIEW.messages.filter(message => message.life > 0);
+    drawPreview();
+  } else if (PREVIEW.dirty) drawPreview();
+  PREVIEW.dirty = false;
+  requestAnimationFrame(frame);
+}
+
+for (const button of document.querySelectorAll('[data-demo]')) button.onclick = () => { audioInit(); resetDemo(button.dataset.demo); };
+$('#phase').onchange = event => { PREVIEW.phase = Number(event.target.value); resetDemo(); };
+$('#pause').onclick = togglePause;
+$('#immortal').onchange = () => { if (!$('#immortal').checked) G.P.inv = 0; PREVIEW.dirty = true; };
+resetDemo(); previewLayout(); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

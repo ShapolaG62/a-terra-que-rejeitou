@@ -22,7 +22,7 @@ function audio(savedSound = '1') {
   const video = { muted: false };
   const saved = { 'terra-som': savedSound };
   const sandbox = vm.createContext({
-    document: { getElementById: id => id === 'music' ? music : video },
+    document: { addEventListener() {}, querySelectorAll: () => [], getElementById: id => id === 'music' ? music : video },
     localStorage: { getItem: key => saved[key], setItem: (key, value) => { saved[key] = value; } },
     window: { AudioContext: class {
       constructor() { this.state = 'running'; this.destination = {}; }
@@ -87,7 +87,7 @@ test('a opção Som pausa e retoma a trilha e controla os efeitos e vídeos', as
   assert.equal(music.paused, false);
   assert.equal(music.currentTime, 23);
   assert.equal(video.muted, false);
-  assert.equal(AU.master.gain.value, 0.55);
+  assert.equal(AU.master.gain.value, 0.55 * AU.vol * AU.sfx);
   assert.equal(saved['terra-som'], '1');
 });
 
