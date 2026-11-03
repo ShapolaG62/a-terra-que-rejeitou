@@ -278,19 +278,64 @@ function drawVinePiece(v, b, t) {
   for (let i = 0; i < len; i++) { const x = v.x + Math.round(Math.sin(i * 0.17 + v.x * 0.1) * 1.5) + Math.round(Math.sin(i * 0.5) * 3); rect(ctx, x, v.y0 + i, 1, 1, P.vine[0]); }
 }
 // 05 — copa com cipós: folhagem em cachos, parada; os cipós balançam só nas pontas
+// tom misturado (sombra das folhas de dentro da copa)
+function mixHex(a, b, k) { const p = s => [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16)), A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, '0')).join(''); }
+// folha em ponta (bico) saindo da borda da copa
+function leafTip(x, px, py, dx, dy, col, out) { rect(x, px - 1, py - 1, 3, 3, out); rect(x, px, py, 2, 2, col); rect(x, px + dx, py + dy, 1, 1, col); }
+// copa cheia em camadas: massa escura no fundo, tufos do meio, tufos iluminados em cima, folhas em ponta nas bordas,
+// folhas pendendo embaixo e pontos de sol; tudo na paleta do bioma
 function drawCanopy(cn, b, t) {
-  const P = tpal(b), img = tcache(`can2-${b}-${cn.w}`, cn.w + 24, 40, (x) => {
-    const r = seeded(cn.w * 3 + 1);
-    for (let i = 0; i < cn.w / 9 + 3; i++) leafCluster(x, 12 + r() * cn.w, 2 + r() * 8, 8 + r() * 6 | 0, 6 + r() * 4 | 0, P, r);
-    for (let i = 0; i < cn.w / 14 + 2; i++) leafCluster(x, 14 + r() * (cn.w - 4), 14 + r() * 10, 5 + r() * 4 | 0, 4 + r() * 3 | 0, P, r);
+  const P = tpal(b), cw = cn.w, img = tcache(`can3-${b}-${cw}`, cw + 36, 56, (x) => {
+    const r = seeded(cw * 3 + 1), deep = mixHex(P.leaf[0], P.out, 0.45), L = 18;
+    // fundo: massa contínua e escura (dá volume e fecha os buracos)
+    for (let i = 0; i < cw / 5 + 5; i++) { const cx = L + r() * cw, cy = 16 + r() * 14, rx = 10 + r() * 6 | 0, ry = 7 + r() * 4 | 0; ell(x, cx, cy + 1, rx + 1, ry + 1, P.out); ell(x, cx, cy, rx, ry, deep); }
+    // meio: tufos cheios com luz de cima
+    for (let i = 0; i < cw / 4 + 5; i++) leafCluster(x, L + r() * cw, 10 + r() * 16, 8 + r() * 6 | 0, 6 + r() * 3 | 0, P, r);
+    // topo: tufos menores e mais claros, onde o sol bate
+    for (let i = 0; i < cw / 7 + 3; i++) leafCluster(x, L + 2 + r() * (cw - 4), 6 + r() * 8, 5 + r() * 4 | 0, 4 + r() * 2 | 0, P, r);
+    // folhas em ponta pelas bordas (topo e lados)
+    for (let i = 0; i < cw / 2 + 6; i++) {
+      const a = -HPI + r() * HPI, ex = L + cw / 2 + Math.cos(a) * (cw / 2 + 1), ey = 17 + Math.sin(a) * 11;
+      leafTip(x, Math.round(ex), Math.round(ey), Math.sign(Math.cos(a)) || 1, -1, r() < 0.5 ? P.leaf[1] : P.leaf[0], P.out);
+    }
+    // folhas pendendo embaixo da copa e sombra na base
+    for (let i = 0; i < cw / 3; i++) { const lx = L + 2 + r() * (cw - 4), ly = 26 + r() * 6, ln = 2 + (r() * 3 | 0); rect(x, lx, ly, 2, ln + 1, P.out); rect(x, lx, ly, 1, ln, i % 3 ? deep : P.leaf[0]); }
+    // veios e pontos de sol nas folhas
+    for (let i = 0; i < cw * 0.8; i++) { const sx = L + r() * cw, sy = 4 + r() * 18; rect(x, sx, sy, 1, 1, r() < 0.65 ? P.leaf[2] : P.moss[2]); }
+    for (let i = 0; i < cw / 3; i++) { const sx = L + r() * cw, sy = 12 + r() * 14; rect(x, sx, sy, 2, 1, deep); }
   });
-  ctx.drawImage(img, cn.x - 12, -6);
-  const r = seeded(cn.w * 5 + cn.x);
-  for (let k = 0; k < (cn.vines || 4); k++) vineStrand(cn.x + 6 + r() * (cn.w - 12), 20 + r() * 8, 22 + r() * 50, P, t, r() * 6, true);
+  const cy = cn.y || 0;
+  ctx.drawImage(img, cn.x - 18, -10 + cy);
+  const r = seeded(cw * 5 + cn.x);
+  for (let k = 0; k < (cn.vines || 4); k++) vineStrand(cn.x + 6 + r() * (cw - 12), 26 + cy + r() * 6, 22 + r() * 50, P, t, r() * 6, true);
+}
+// tronco de árvore ao fundo, sustentando uma copa (ou um tufo de cipós): da copa até o chão
+function drawTreeTrunk(x, w, top, b, seed) {
+  x = Math.round(x);
+  const gy = Math.min(groundY(x), 240), h = Math.max(10, gy - top), key = `trunk-${b}-${w}-${h}-${seed % 5}`;
+  const img = tcache(key, w + 30, h + 8, (c) => {
+    const P = tpal(b), r = seeded(seed * 3 + w), L = 15, R = 15 + w;
+    // galhos subindo para os lados da copa
+    for (const dir of [-1, 1]) { const by = 6 + r() * 8; strokePath(c, curve(L + w / 2, by + 4, L + w / 2 + dir * (w * 0.7), by, L + w / 2 + dir * (w + 4 + r() * 3), 1, 10), w > 9 ? 3 : w > 7 ? 2 : 1, P.bark[1], P.out); }
+    // corpo: luz à esquerda, sombra à direita, sulcos verticais e nós
+    rect(c, L - 1, 0, w + 2, h, P.out);
+    for (let xx = 0; xx < w; xx++) rect(c, L + xx, 0, 1, h, xx < 2 ? P.bark[1] : xx > w - 3 ? P.bark[2] : P.bark[0]);
+    for (let i = 0; i < w / 3; i++) { const sx = L + 2 + i * 3 + (r() * 2 | 0); for (let y = 2; y < h - 2; y++) if (r() < 0.7) rect(c, Math.round(sx + Math.sin(y * 0.2 + i) * 0.7), y, 1, 1, P.bark[2]); }
+    for (let i = 0; i < h / 30 + 1; i++) { const ky = 8 + r() * (h - 16), kx = L + 2 + r() * (w - 4); rect(c, kx - 1, ky, 3, 2, P.out); rect(c, kx - 1, ky - 1, 2, 1, P.bark[1]); }
+    for (let i = 0; i < h / 12; i++) if (r() < 0.6) rect(c, L + (r() < 0.5 ? 0 : w - 2), 4 + r() * (h - 8), 2, 2 + (r() * 3 | 0), P.moss[1]);
+  });
+  // ao fundo: um pouco mais escuro que o primeiro plano
+  ctx.globalAlpha = 0.92; ctx.drawImage(img, x - 15 - Math.floor(w / 2), top); ctx.globalAlpha = 1;
 }
 // 05 cipós pendentes (primeiro plano): um tufo de folhas no alto e cipós com musgo
 function drawHangingVines(o, b, t) {
   const P = tpal(b), r = seeded(o.x * 7);
   for (let k = 0; k < 5; k++) vineStrand(o.x + k * 9 - 18 + r() * 4, 4, 30 + r() * 55, P, t, r() * 6, true);
-  ctx.drawImage(tcache(`hvtop-${b}`, 60, 18, (x) => { const r2 = seeded(5); for (let i = 0; i < 6; i++) leafCluster(x, 6 + i * 9 + r2() * 4, 4 + r2() * 4, 6, 4, P, r2); }), o.x - 30, -6);
+  ctx.drawImage(tcache(`hvtop2-${b}`, 70, 26, (x) => {
+    const r2 = seeded(5), deep = mixHex(P.leaf[0], P.out, 0.45);
+    for (let i = 0; i < 8; i++) { const cx = 6 + i * 8 + r2() * 4, cy = 8 + r2() * 5; ell(x, cx, cy + 1, 8, 6, P.out); ell(x, cx, cy, 7, 5, deep); }
+    for (let i = 0; i < 9; i++) leafCluster(x, 6 + i * 7 + r2() * 4, 5 + r2() * 6, 6 + (r2() * 2 | 0), 4, P, r2);
+    for (let i = 0; i < 14; i++) leafTip(x, 4 + r2() * 62, 18 + r2() * 4, r2() < 0.5 ? -1 : 1, 1, i % 2 ? P.leaf[1] : P.leaf[0], P.out);
+    for (let i = 0; i < 30; i++) rect(x, 4 + r2() * 62, 2 + r2() * 10, 1, 1, r2() < 0.65 ? P.leaf[2] : P.moss[2]);
+  }), o.x - 35, -8);
 }

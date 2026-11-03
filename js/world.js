@@ -70,20 +70,41 @@ function solidAt(x, y) { for (const s of G.lvl.solids) if (x >= s.x && x < s.x +
 // copas e cipós extras pelo céu: preenchem os trechos sem copa, deixando a arena livre
 function addSkyCanopies(L) {
   const r = seeded(L.w * 13 + L.id.length * 7), A = L.arena;
-  for (let x = 70; x < L.w - 60; x += 140 + r() * 110) {
+  for (let x = 60; x < L.w - 50; x += 85 + r() * 70) {
     if (A && x > A.x0 - 40 && x < A.x0 + AW + 40) continue;
-    if (L.canopies.some(c => Math.abs(c.x + c.w / 2 - x) < 100)) continue;
+    if (L.canopies.some(c => Math.abs(c.x + c.w / 2 - x) < 70)) continue;
     const w = 50 + 10 * (r() * 5 | 0);
-    L.canopies.push({ x: Math.round(x - w / 2), w, vines: 2 + (r() * 3 | 0) });
-    if (r() < 0.55) L.hvines.push({ x: Math.round(x + (r() - 0.5) * 50) });
+    L.canopies.push({ x: Math.round(x - w / 2), w, vines: 2 + (r() * 3 | 0), y: r() * 26 | 0 });
+    if (r() < 0.35) L.hvines.push({ x: Math.round(x + (r() - 0.5) * 50) });
   }
+}
+// cada árvore precisa de chão firme embaixo: procura um ponto de chão sob a copa (nunca buraco nem água);
+// sem chão, a copa sai. O tronco engrossa com o tamanho da copa.
+function treeGround(L, x) {
+  if (L.water.some(w => x > w.x - 6 && x < w.x + w.w + 6)) return null;
+  let best = 999; for (const s of L.solids) if (s.t === 'g' && !s.wall && x >= s.x + 3 && x <= s.x + s.w - 3 && s.y < best) best = s.y;
+  return best <= 170 ? best : null;
+}
+function prepareTrees(L) {
+  L.canopies = L.canopies.filter(cn => {
+    const c = cn.x + cn.w / 2;
+    for (const k of [0, -0.15, 0.15, -0.3, 0.3, -0.42, 0.42]) { const x = Math.round(c + k * cn.w); if (treeGround(L, x) != null) { cn.tx = x; cn.tw = clamp(Math.round(cn.w * 0.17), 8, 14); return true; } }
+    return false;
+  });
+  L.hvines = L.hvines.filter(o => { for (const dx of [0, -8, 8, -16, 16]) if (treeGround(L, o.x + dx) != null) { o.tx = o.x + dx; return true; } return false; });
 }
 function loadLevel(id) {
   const L = LEVELS[id]();
   L.id = id;
+  const AR = L.arena;
+  if (AR && AR.x0 + AW > L.w) {
+    const old = L.w; L.w = AR.x0 + AW;
+    for (const s of L.solids) if (s.t === 'g' && !s.block && s.x + s.w >= old - 1) s.w += L.w - old;
+    for (const w of L.water) if (w.x + w.w >= old - 1) w.w += L.w - old;
+  }
   L.solids.push({ x: -20, y: -200, w: 20, h: 500, t: 'g', wall: true }, { x: L.w, y: -200, w: 20, h: 500, t: 'g', wall: true });
   applyWorldState(L);
-  if (!L.cave) addSkyCanopies(L);
+  if (!L.cave) { addSkyCanopies(L); prepareTrees(L); }
   // tufos de grama decorativos
   const r = seeded(id.length * 97 + 3);
   for (const s of L.solids) if (s.t === 'g' && !s.wall && !s.block) for (let x = s.x + 2; x < s.x + s.w - 2; x += 3 + r() * 9 | 0) L.decor.push({ x, y: s.y, h: 1 + r() * 4 | 0, c: r() });
@@ -623,6 +644,10 @@ function renderWorld() {
   }
   // decoração de fundo
   for (const p of L.props) if (p.x > cx - 120 && p.x < cx + W + 120) drawProp(p, t);
+  if (!L.cave) {
+    for (const cn of L.canopies) if (cn.tx != null && cn.x + cn.w > cx - 40 && cn.x < cx + W + 40) drawTreeTrunk(cn.tx, cn.tw, 24 + (cn.y || 0), L.biome, cn.x);
+    for (const o of L.hvines) if (o.tx != null && o.x > cx - 40 && o.x < cx + W + 40) drawTreeTrunk(o.tx, 6, 10, L.biome, o.x + 7);
+  }
   for (const f of L.fires) if (f.x > cx - 40 && f.x < cx + W + 40) drawFire(ctx, f.x, groundY(f.x), t, !!G.save.lit[f.id]);
   drawCaveBack(L, cx, t);
   const E = L.echoAt;

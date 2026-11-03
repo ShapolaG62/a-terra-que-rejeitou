@@ -482,7 +482,7 @@ BOSS_INTRO.boitata = [
 BOSSES.boitata = {
   nome: 'BOITATÁ ENCARCERADO', sub: 'quebre as correntes, não a serpente',
   init() {
-    const A = G.lvl.arena, sup = [64, 160, 256].map((dx, i) => ({ x: A.x0 + dx, broken: false, i }));
+    const A = G.lvl.arena, sup = [0.2, 0.5, 0.8].map((k, i) => ({ x: A.x0 + Math.round(AW * k), broken: false, i }));
     const seg = []; for (let i = 0; i < 40; i++) seg.push({ x: A.x0 + 260 + i * 4, y: GY - 8 });
     return { w: 22, h: 16, hp: 1, contact: 14, inv: true, noAim: true, chains: 3, sup, seg, y: GY - 8, glow: 0, shield: false, rockCd: 3 };
   },
