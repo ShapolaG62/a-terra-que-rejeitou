@@ -6,6 +6,7 @@ const UI = { dialog: false, menu: false, card: false };
 let DQ = null;
 const dEl = $('#dialog'), dWho = dEl.querySelector('.who'), dTxt = dEl.querySelector('.txt'), dCh = dEl.querySelector('.choices'), dNx = dEl.querySelector('.nx');
 function say(who, text) {
+  convSpeaker(who);
   return new Promise(res => {
     UI.dialog = true; dEl.hidden = false; layout();
     dWho.textContent = who && who !== 'Espírito' ? who : (who === 'Espírito' ? 'Espírito' : '');
@@ -15,6 +16,7 @@ function say(who, text) {
   });
 }
 function choose(text, opts, who) {
+  convSpeaker(who);
   return new Promise(res => {
     UI.dialog = true; dEl.hidden = false; layout();
     dWho.textContent = who || ''; dTxt.classList.toggle('narr', !who); dTxt.textContent = text; dNx.hidden = true;
@@ -32,7 +34,50 @@ function choose(text, opts, who) {
 }
 function markChoice() { [...dCh.children].forEach((b, i) => b.classList.toggle('sel', i === DQ.sel)); }
 function pickChoice(i) { if (!DQ || !DQ.choices || DQ.choices[i].disabled) return; const r = DQ.res; SFX.ui(); DQ = null; dCh.innerHTML = ''; r(i); }
-function closeDialog() { DQ = null; UI.dialog = false; dEl.hidden = true; }
+function closeDialog() { DQ = null; UI.dialog = false; dEl.hidden = true; CONV.partner = null; }
+// Conversa com NPC (ou guardião): os dois aparecem grandes, o espírito à esquerda e quem conversa à direita;
+// quem está falando fica iluminado e mexe ao falar, o outro fica na sombra
+const RETRATO = { 'Caçador': 'cacador', 'Mestra da zarabatana': 'mestraA', 'Mestra do arco': 'arqueira', 'Velho canoeiro': 'canoeiro', 'Lanceira da cabaça': 'lanceira', 'Anciã das sementes': 'ancia', 'Anciã': 'ancia' };
+const RETRATO_BOSS = { 'Mapinguari': 'mapinguari', 'Capelobo': 'capelobo', 'Pai do Mato': 'paidomato', 'Labatut': 'labatut', 'Corpo-seco': 'corposeco' };
+const CONV = { partner: null, who: null, t0: 0, tw: 0 };
+const convC = document.createElement('canvas'); convC.width = 90; convC.height = 100;
+const convX = convC.getContext('2d');
+function convSpeaker(who) {
+  if (RETRATO[who] || (RETRATO_BOSS[who] && BOSSES[RETRATO_BOSS[who]])) { if (!CONV.partner) CONV.t0 = G.rt; if (CONV.partner !== who) CONV.partner = who; }
+  if (CONV.who !== who) CONV.tw = G.rt;
+  CONV.who = who;
+}
+function drawConversation() {
+  const t = G.rt, a = clamp((t - CONV.t0) / 0.35, 0, 1), e = 1 - (1 - a) ** 3, partner = CONV.partner;
+  const me = CONV.who === 'Espírito', them = CONV.who === partner, talking = DQ && DQ.typing && Math.sin(t * 18) > 0 ? 1 : 0;
+  const base = L.portrait ? H - 4 : H - 6, lx = Math.round(W * 0.21 - (1 - e) * 140), rx = Math.round(W * 0.79 + (1 - e) * 140);
+  // o cenário escurece, com uma faixa de luz no chão
+  ctx.globalAlpha = 0.68 * e; rect(ctx, 0, 0, W, H, '#07050a'); ctx.globalAlpha = 1;
+  const glow = (x, on) => { const sw = clamp((t - CONV.tw) / 0.25, 0, 1), k = on ? sw : 1 - sw * 0.4; if (!on && k <= 0.6) return; const g = ctx.createRadialGradient(x, base - 70, 4, x, base - 70, 90); g.addColorStop(0, on ? '#f2c14e38' : '#8a7ab018'); g.addColorStop(1, '#f2c14e00'); ctx.globalAlpha = e * (on ? k : 0.5); ctx.fillStyle = g; ctx.fillRect(x - 90, base - 160, 180, 180); ctx.globalAlpha = 1; };
+  glow(lx, me); glow(rx, them);
+  if (L.portrait) for (const x of [lx, rx]) { ctx.globalAlpha = 0.5 * e; ell(ctx, x, base, 34, 4, '#000'); ctx.globalAlpha = 1; }
+  // o espírito: desenhado pequeno e ampliado 3×, pixel por pixel
+  convX.clearRect(0, 0, convC.width, convC.height);
+  drawHuman(convX, 45, 96 - (me ? talking : 0), 1, { kind: 'idle', t }, playerSpec(G.P.form));
+  ctx.imageSmoothingEnabled = false;
+  ctx.filter = me || !them ? 'none' : 'brightness(0.45) saturate(0.7)';
+  ctx.globalAlpha = e; ctx.drawImage(convC, lx - 135, base - 288, 270, 300); ctx.globalAlpha = 1; ctx.filter = 'none';
+  // quem conversa: gente do povo ampliada 3×, guardião ampliado 2×
+  ctx.filter = them || !me ? 'none' : 'brightness(0.45) saturate(0.7)';
+  ctx.globalAlpha = e;
+  if (RETRATO[partner]) {
+    convX.clearRect(0, 0, convC.width, convC.height);
+    drawHuman(convX, 45, 96 - (them ? talking : 0), -1, { kind: 'idle', t }, NPC[RETRATO[partner]]);
+    ctx.drawImage(convC, rx - 135, base - 288, 270, 300);
+  } else {
+    const k = RETRATO_BOSS[partner], live = G.boss && G.boss.kind === k ? G.boss : null;
+    const B = Object.assign({ kind: k, t, st: 'idle', mood: 'povo', hits: 0 }, live || {}, { x: 0, y: 0, f: -1, flash: 0 });
+    ctx.save(); ctx.translate(rx, base - (them ? talking * 2 : 0)); ctx.scale(2, 2);
+    try { BOSSES[k].draw(B); } catch (err) {}
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1; ctx.filter = 'none';
+}
 async function talk(lines) { for (const [w, t] of lines) await say(w, t); closeDialog(); }
 dEl.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; advanceDialog(); });
 function advanceDialog() {
@@ -89,6 +134,7 @@ function closeMenu(act) { const r = UI.menu.res; UI.menu = false; mEl.hidden = t
 function navMark(root, i) { const bs = [...root.querySelectorAll('.btn:not([hidden])')]; bs.forEach((b, k) => b.classList.toggle('sel', k === i)); return bs; }
 function navTick(root, state) {
   const bs = [...root.querySelectorAll('.btn:not([hidden])')]; if (!bs.length) return;
+  if ((I.pressed.left || I.pressed.right) && root.querySelector('input[data-vol]')) { audioInit(); setVolume(AU.vol + (I.pressed.right ? 0.1 : -0.1)); SFX.ui(); }
   if (I.pressed.up || I.pressed.down) { state.sel = (state.sel + (I.pressed.down ? 1 : bs.length - 1)) % bs.length; navMark(root, state.sel); bs[state.sel].scrollIntoView({ block: 'nearest' }); SFX.ui(); }
   if (I.pressed.confirm || I.pressed.attack || I.pressed.interact) { const b = bs[state.sel]; if (b && !b.disabled) b.click(); }
   if ((I.pressed.pause || I.pressed.inv) && UI.menu) { const back = root.querySelector('[data-act="back"]'); if (back) back.click(); }
@@ -181,6 +227,7 @@ async function pauseMenu() {
       <button class="btn" data-act="j">Diário <small>${G.save.echoes.length}/6 ecos</small></button>
       <button class="btn" data-act="k">Controles</button>
       <button class="btn" data-act="m">Som <small>${AU.on ? 'ligado' : 'desligado'}</small></button>
+      ${volHTML()}
       <button class="btn" data-act="t">Voltar ao título</button></div>`);
     if (a === 'back') break;
     if (a === 's') await menu(statsHTML(false));
@@ -215,6 +262,155 @@ function drawTransition() {
   ctx.globalAlpha = 1 - e * 0.35; ctx.drawImage(transC, ox, 0); ctx.globalAlpha = 1;
   ctx.globalAlpha = 0.25 * (1 - e); rect(ctx, ox + W - 1, 0, 2, H, '#f4ecd8'); ctx.globalAlpha = 1; // brilho na emenda
 }
+// ---------- Cutscene de viagem entre biomas ----------
+// O espírito atravessa a paisagem correndo: o bioma de onde sai se dissolve no próximo (céu, fundo, chão e árvores),
+// com faixas de cinema, letreiro do ato, partículas da região e a rota da jornada. Uns 6 s; pula depois do 1º segundo.
+const ROTA = ['prologo', 'amazonia', 'cerrado', 'gruta', 'pantanal', 'caatinga', 'mata', 'coracao'];
+const ROTA_NOME = { prologo: 'Prólogo', amazonia: 'Amazônia', cerrado: 'Cerrado', gruta: 'Gruta', pantanal: 'Pantanal', caatinga: 'Caatinga', mata: 'Mata Atlântica', coracao: 'Coração' };
+// cor das partículas e direção (1 cai, -1 sobe, 0 flutua)
+const VIAGEM_PART = { prologo: ['#8a8ab0', 0], amazonia: ['#c8f060', 0], cerrado: ['#ffb04a', -1], gruta: ['#8a7a6a', 1], pantanal: ['#f8d8e8', 0], caatinga: ['#e8d8b0', 0.4], mata: ['#9fe0d0', 1], coracao: ['#7af0e0', -1] };
+async function travelScene(from, to, card) {
+  const form = G.P ? G.P.form : 'espirito', dur = VIAGEM_DUR, t0 = G.rt, A = biome(from), B = biome(to);
+  let skip = false; const onTap = () => { if (G.rt - t0 > 1) skip = true; };
+  stage.addEventListener('pointerdown', onTap);
+  $('#hud').hidden = true; closeDialog();
+  G.state = 'scene';
+  G.sceneDraw = () => drawTravel(Math.min(1, (G.rt - t0) / dur), G.rt - t0, A, B, from, to, card, form);
+  await waitUntil(() => skip || G.rt - t0 > dur || (G.rt - t0 > 1 && (I.pressed.confirm || I.pressed.jump || I.pressed.pause || I.pressed.attack || I.pressed.interact)));
+  stage.removeEventListener('pointerdown', onTap);
+  snapshotScene(); G.sceneDraw = null;   // o último quadro da viagem desliza para a fase nova
+}
+// cenário da viagem: um trecho de mundo com as peças do jogo (chão, copas, troncos, cipós, samambaias, tronco caído);
+// até Xb é o bioma de saída, depois o de chegada. Gerado uma vez por par de biomas.
+const VIAGEM_VEL = 78, VIAGEM_DUR = 7, VIAGEM_PX = Math.round(W * 0.4);
+const TRAVEL_CACHE = {};
+function travelWorld(from, to) {
+  const key = from + '>' + to; if (TRAVEL_CACHE[key]) return TRAVEL_CACHE[key];
+  const Xb = Math.round(VIAGEM_DUR * VIAGEM_VEL * 0.42 + VIAGEM_PX), end = VIAGEM_DUR * VIAGEM_VEL + W + 120;
+  const r = seeded(ROTA.indexOf(from) * 31 + ROTA.indexOf(to) * 7 + 3), bio = x => x < Xb ? from : to;
+  const trees = [], vines = [], ferns = [], hopX = Math.round(VIAGEM_PX + VIAGEM_DUR * VIAGEM_VEL * 0.2);
+  for (let x = -20; x < end; x += 90 + r() * 60) {
+    if (Math.abs(x - Xb) < 46 || Math.abs(x - hopX) < 30) continue;
+    const w = 56 + 10 * (r() * 5 | 0), b = bio(x);
+    trees.push({ x: Math.round(x - w / 2), w, y: r() * 22 | 0, vines: 2 + (r() * 3 | 0), b, tx: Math.round(x), tw: clamp(Math.round(w * 0.17), 8, 14) });
+  }
+  for (let x = 60; x < end; x += 110 + r() * 110) if (Math.abs(x - Xb) > 40 && r() < 0.55) vines.push({ x: Math.round(x), b: bio(x) });
+  for (let x = 6; x < end; x += 16 + r() * 26) ferns.push({ x: Math.round(x), b: bio(x), s: 0.6 + r() * 0.7, seed: r() * 1e4 | 0, front: r() < 0.25 });
+  return (TRAVEL_CACHE[key] = { Xb, trees, vines, ferns, hopX, bio });
+}
+// teto de pedra da gruta (dentes de rocha e raízes penduradas) entre x0 e x1, aparecendo na boca da caverna
+function caveCeiling(x0, x1, mouth, dir, t) {
+  const P = tpal('gruta'), top = -DY;
+  for (let x = Math.floor(x0 / 2) * 2; x < x1; x += 2) {
+    const d = dir > 0 ? x - mouth : mouth - x; if (d < -30) continue;
+    const ramp = clamp((d + 30) / 70, 0, 1), h = Math.round((DY + 10 + hash(x >> 2) * 18 + (hash(x >> 4) < 0.3 ? hash(x) * 30 : 0)) * ramp);
+    if (h <= 0) continue;
+    rect(ctx, x, top, 2, h, P.stone[2]); rect(ctx, x, top + h - 3, 2, 3, P.out); if (hash(x * 3) < 0.25) rect(ctx, x, top + h - 6, 1, 2, P.stone[1]);
+    if (ramp > 0.9 && hash(x * 7) < 0.05) { const len = 12 + hash(x * 11) * 34; vineStrand(x, top + h - 2, len, P, t, x, true); }
+  }
+}
+function drawTravel(k, tt, A, B, from, to, card, form) {
+  const V = travelWorld(from, to), cam = Math.round(tt * VIAGEM_VEL), top = -DY, bot = H - DY;
+  const pxW = cam + VIAGEM_PX, e0 = clamp((pxW - (V.Xb - 70)) / 140, 0, 1), e = e0 * e0 * (3 - 2 * e0);
+  // fundo: o céu e as camadas do bioma de saída cedem para o de chegada quando o espírito cruza a fronteira
+  drawBackground(A, cam, tt);
+  if (e > 0) { ctx.globalAlpha = e; drawBackground(B, cam, tt); ctx.globalAlpha = 1; }
+  ctx.save(); ctx.translate(-cam, 0);
+  const vis = x => x > cam - 120 && x < cam + W + 120;
+  // troncos e copas (na gruta, o teto de pedra faz o papel das árvores)
+  for (const cn of V.trees) if (vis(cn.tx) && cn.b !== 'gruta') { const h = GY - (24 + cn.y); ctx.globalAlpha = 0.92; ctx.drawImage(trunkPiece(cn.b, cn.tw, h, cn.x), cn.tx - 15 - Math.floor(cn.tw / 2), 24 + cn.y); ctx.globalAlpha = 1; }
+  for (const cn of V.trees) if (vis(cn.tx) && cn.b !== 'gruta') drawCanopy(cn, cn.b, tt);
+  for (const o of V.vines) if (vis(o.x) && o.b !== 'gruta') { ctx.globalAlpha = 0.92; ctx.drawImage(trunkPiece(o.b, 6, GY - 10, o.x + 7), o.x - 18, 10); ctx.globalAlpha = 1; drawHangingVines(o, o.b, tt); }
+  if (from === 'gruta' || to === 'gruta') caveCeiling(cam - 4, cam + W + 4, V.Xb, to === 'gruta' ? 1 : -1, tt);
+  // chão com os ladrilhos do jogo: musgo, terra, pedras e capim
+  for (let tx = Math.floor(cam / TILE) * TILE; tx < cam + W + TILE; tx += TILE) {
+    const b = V.bio(tx), P = tpal(b);
+    ctx.drawImage(groundTile(b, hash((tx / TILE | 0) * 17 + 3) < 0.22), tx, GY);
+    rect(ctx, tx, GY + TILE, TILE, bot - GY - TILE, P.deep);
+  }
+  for (let x = cam - (cam % 3); x < cam + W; x += 3) { const b = V.bio(x), P = tpal(b), bg = biome(b), h2 = 1 + (hash(x) * 4 | 0); rect(ctx, x, GY - h2, 1, h2, hash(x + 7) > 0.7 && bg.grass ? bg.grass : P.moss[hash(x + 3) > 0.4 ? 2 : 1]); }
+  for (const f of V.ferns) if (!f.front && vis(f.x)) fern(ctx, f.x, GY + 1, tpal(f.b), seeded(f.seed), f.s);
+  // tronco caído no caminho: o espírito pula por cima
+  ctx.drawImage(logPiece(V.bio(V.hopX)), V.hopX - 17, GY - 18);
+  // o espírito correndo com a forma que está usando (e a chama do fogo frio, se já tiver)
+  const dh = pxW - V.hopX + 34, air = dh > 0 && dh < 52, jy = air ? Math.round(-Math.sin(dh / 52 * Math.PI) * 22) : 0;
+  const px = pxW, py = GY + jy;
+  if (form === 'espirito') { ctx.globalAlpha = 0.15; ell(ctx, px, py - 13, 12, 16, '#8a7ab0'); ctx.globalAlpha = 1; }
+  // riscos de vento passando pelo corpo (dá a sensação de velocidade)
+  for (let i = 0; i < 5; i++) { const p = (tt * 2.2 + i * 0.37) % 1, wy = py - 8 - (i * 9) % 34; ctx.globalAlpha = 0.35 * Math.sin(p * Math.PI); rect(ctx, px + 14 - p * 46, wy, 8 + (i % 3) * 4, 1, '#f4ecd8'); }
+  ctx.globalAlpha = 1;
+  drawHuman(ctx, px, py, 1, air ? { kind: dh < 26 ? 'jump' : 'fall' } : { kind: 'run', ph: tt * 11, t: tt }, playerSpec(form));
+  if (G.save.cold) drawSparkle(ctx, px - 16, py - 36 + Math.sin(tt * 2.5) * 2, tt, '#bfe4ff');
+  if (!air) for (let i = 0; i < 4; i++) { const p = (tt * 3 + i / 4) % 1; ctx.globalAlpha = 0.5 * (1 - p); rect(ctx, px - 8 - p * 22, GY - 2 - p * 4, 2, 1, biome(V.bio(px)).ground.top); }
+  ctx.globalAlpha = 1;
+  // samambaias de primeiro plano passando na frente
+  for (const f of V.ferns) if (f.front && vis(f.x)) fern(ctx, f.x, GY + 3, tpal(f.b), seeded(f.seed), f.s * 1.3);
+  ctx.restore();
+  // bando de pássaros cruzando o céu (morcegos na gruta)
+  const birdT = (tt - 1.2) / 3.4;
+  if (birdT > 0 && birdT < 1) {
+    const cave = V.bio(pxW) === 'gruta', col = cave ? '#1a1412' : tpal(V.bio(pxW)).out;
+    for (let i = 0; i < 6; i++) {
+      const bx = W + 20 - birdT * (W + 80) + i * 13 + (i % 2) * 6, by = top + 30 + i * 5 - (i % 3) * 9 + Math.sin(tt * 3 + i) * 3, fl = Math.sin(tt * 14 + i * 1.7) > 0 ? -1 : 1;
+      rect(ctx, bx, by, 2, 1, col); rect(ctx, bx - 2, by + fl, 2, 1, col); rect(ctx, bx + 2, by + fl, 2, 1, col);
+    }
+  }
+  // partículas da região, conforme o lado da fronteira
+  const [pc, dir] = VIAGEM_PART[e > 0.5 ? to : from] || ['#ffffff', 0];
+  for (let i = 0; i < 40; i++) {
+    const x = ((hash(i) * W * 2 - cam * (0.4 + hash(i + 3) * 0.9)) % W + W) % W;
+    const y = ((hash(i + 7) * 160 + dir * tt * 20 * (0.5 + hash(i + 1)) + Math.sin(tt * 2 + i) * 4) % 160 + 160) % 160 + top + 18;
+    ctx.globalAlpha = 0.45 + 0.45 * Math.sin(tt * 4 + i); rect(ctx, x, y, 1 + (i % 4 === 0 ? 1 : 0), 1 + (i % 7 === 0 ? 1 : 0), pc);
+  }
+  ctx.globalAlpha = 1;
+  // entra a partir da última imagem da fase anterior
+  if (tt < 0.6) { ctx.globalAlpha = 1 - tt / 0.6; ctx.drawImage(transC, 0, top); ctx.globalAlpha = 1; }
+  // faixas de cinema (a de baixo leva a rota)
+  const out = k > 0.93 ? (1 - k) / 0.07 : 1, lb = Math.round(24 * Math.min(1, tt / 0.5) * out);
+  rect(ctx, 0, top, W, lb, '#000'); rect(ctx, 0, bot - lb, W, lb, '#000');
+  // letreiro: o ato desce, o nome nasce letra por letra, o traço dourado abre e a frase vai sendo escrita
+  const ts = k * VIAGEM_DUR - VIAGEM_DUR * 0.3, ta = clamp(ts / 0.4, 0, 1) * clamp((0.97 - k) / 0.07, 0, 1);
+  if (ts > 0 && ta > 0) {
+    const y0 = top + lb + 12;
+    ctx.save(); ctx.globalAlpha = ta * 0.5;
+    const g = ctx.createLinearGradient(0, y0, 0, y0 + 82); g.addColorStop(0, '#0a080600'); g.addColorStop(0.25, '#0a0806'); g.addColorStop(0.75, '#0a0806'); g.addColorStop(1, '#0a080600');
+    ctx.fillStyle = g; ctx.fillRect(0, y0, W, 82);
+    const sh = (str, x, y, col) => { ctx.fillStyle = '#0a0806'; ctx.fillText(str, x + 1, y + 1); ctx.fillStyle = col; ctx.fillText(str, x, y); };
+    ctx.textAlign = 'center';
+    ctx.globalAlpha = ta * clamp(ts / 0.5, 0, 1); ctx.font = '600 10px "Pixelify Sans", monospace';
+    sh(card[0].toUpperCase().split('').join(' '), W / 2, y0 + 12 - Math.round((1 - clamp(ts / 0.5, 0, 1)) * 6), '#f2c14e');
+    // título, uma letra de cada vez subindo
+    ctx.font = '700 26px "Pixelify Sans", monospace'; ctx.textAlign = 'left';
+    const T = card[1], tw = ctx.measureText(T).width; let lx = W / 2 - tw / 2;
+    for (let i = 0; i < T.length; i++) {
+      const p = clamp((ts - 0.25 - i * 0.045) / 0.25, 0, 1), cw = ctx.measureText(T[i]).width;
+      if (p > 0) { ctx.globalAlpha = ta * p; sh(T[i], Math.round(lx), Math.round(y0 + 40 + (1 - p) * 8), p < 1 ? '#ffffff' : '#f4ecd8'); }
+      lx += cw;
+    }
+    // traço dourado abrindo do centro, com losangos nas pontas
+    const lp = clamp((ts - 0.6) / 0.6, 0, 1), lw = Math.round((tw / 2 + 14) * lp * (2 - lp));
+    if (lw > 0) {
+      ctx.globalAlpha = ta; rect(ctx, W / 2 - lw, y0 + 47, lw * 2, 1, '#f2c14e'); rect(ctx, W / 2 - lw, y0 + 48, lw * 2, 1, '#8a6a2a');
+      for (const s of [-1, 1]) { const dx = W / 2 + s * lw; rect(ctx, dx - 1, y0 + 46, 3, 3, '#f2c14e'); rect(ctx, dx, y0 + 45, 1, 5, '#f2c14e'); }
+    }
+    ctx.textAlign = 'center';
+    if (card[2]) { ctx.globalAlpha = ta * clamp((ts - 0.9) / 0.4, 0, 1); ctx.font = '600 10px "Pixelify Sans", monospace'; sh(card[2], W / 2, y0 + 61, '#e0a070'); }
+    if (card[3]) { const n = Math.floor(clamp((ts - 1.2) * 40, 0, card[3].length)); ctx.globalAlpha = ta; ctx.font = '400 10px "Pixelify Sans", monospace'; sh(card[3].slice(0, n), W / 2, y0 + 75, '#e8dcc0'); }
+    ctx.restore();
+  }
+  // rota da jornada: de onde vem para onde vai
+  const i0 = Math.max(0, ROTA.indexOf(from)), i1 = Math.max(0, ROTA.indexOf(to)), x0 = 52, x1 = W - 52, ry = bot - lb + 8, step = (x1 - x0) / (ROTA.length - 1);
+  ctx.globalAlpha = Math.min(1, tt / 0.8) * out;
+  rect(ctx, x0, ry, x1 - x0, 1, '#5a4e44');
+  const pm = clamp((k - 0.25) / 0.5, 0, 1), pe = pm * pm * (3 - 2 * pm), mx = x0 + (i0 + (i1 - i0) * pe) * step;
+  rect(ctx, x0, ry, mx - x0, 1, '#f2c14e');
+  ROTA.forEach((id, i) => { const x = Math.round(x0 + i * step), done = i <= i0 || (i === i1 && pe >= 1); rect(ctx, x - 2, ry - 2, 5, 5, '#0a0806'); rect(ctx, x - 1, ry - 1, 3, 3, done ? '#f2c14e' : i === i1 ? (Math.sin(tt * 6) > 0 ? '#f4ecd8' : '#8a7a6a') : '#4a4038'); });
+  rect(ctx, Math.round(mx) - 1, ry - 6 + Math.round(Math.sin(tt * 8)), 3, 3, '#bfe4ff'); rect(ctx, Math.round(mx), ry - 7 + Math.round(Math.sin(tt * 8)), 1, 1, '#ffffff');
+  ctx.font = '500 9px "Pixelify Sans", monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#c8b8a0';
+  ctx.fillText(ROTA_NOME[from] || '', x0 + i0 * step, ry + 12); ctx.fillStyle = '#f4ecd8'; ctx.fillText(ROTA_NOME[to] || '', x0 + i1 * step, ry + 12);
+  if (tt > 1) { ctx.textAlign = 'right'; ctx.fillStyle = '#8a7a6a'; ctx.globalAlpha *= 0.8; ctx.fillText(L.touch ? 'toque para pular' : 'Enter: pular', W - 6, top + lb - 8); }
+  ctx.globalAlpha = 1; ctx.textAlign = 'left';
+}
 async function enterAct(n, o = {}) {
   G.save.act = n; writeSave();
   const lvl = homeLevel(n), card = lvl === 'gruta' ? GRUTA_CARD : CARDS[n];
@@ -233,7 +429,7 @@ async function enterAct(n, o = {}) {
   if (walkIn) { G.P.x = Math.max(2, x - 46); G.P.f = 1; G.auto = 1; G.lock++; }
   G.cam.x = clamp(G.P.x - W / 2, 0, G.lvl.w - W);
   G.state = 'play'; $('#hud').hidden = false; updateHudForm(); hud.cache = {};
-  if (o.smooth) { startSlide(); showToast(card[0] + ' · ' + card[1], card[3] || card[2], 3.2); }
+  if (o.smooth) { startSlide(); if (!o.noToast) showToast(card[0] + ' · ' + card[1], card[3] || card[2], 3.2); }
   if (walkIn) { const t0 = G.rt; fade(false); await waitUntil(() => G.P.x >= x || G.rt - t0 > 1.6); G.auto = 0; G.lock--; } else await fade(false);
   if (G.lvl.onStart) scene(G.lvl.onStart);
 }
@@ -249,15 +445,20 @@ async function walkOut() {
 function homeLevel(n = G.save.act) { return n === 2 && G.save.sub === 'gruta' ? 'gruta' : ACTS[n]; }
 async function enterGruta() {
   await walkOut();
+  const from = G.lvl.biome;
   G.save.sub = 'gruta'; G.save.fire = null; G.save.drop = null; writeSave();
   hud.boss.hidden = true;
-  enterAct(G.save.act, { walkIn: true, smooth: true });
+  await travelScene(from, 'gruta', GRUTA_CARD);
+  enterAct(G.save.act, { walkIn: true, smooth: true, noToast: true });
 }
 async function nextAct() {
   await walkOut();
+  const from = G.lvl.biome;
   G.save.act++; G.save.sub = null; G.save.fire = null; G.save.drop = null; writeSave();
   hud.boss.hidden = true;
-  enterAct(G.save.act, { walkIn: true, smooth: true });
+  const to = homeLevel(G.save.act);
+  await travelScene(from, to, to === 'gruta' ? GRUTA_CARD : CARDS[G.save.act]);
+  enterAct(G.save.act, { walkIn: true, smooth: true, noToast: true });
 }
 function grantForm(f) {
   if (!G.save.forms.includes(f)) G.save.forms.push(f);
@@ -895,6 +1096,7 @@ function setupTitle() {
   const s = loadSave();
   const bc = $('#bContinue');
   if (s && !s.done) { bc.hidden = false; bc.innerHTML = `Continuar <small>${CARDS[s.act][0]} · ${CARDS[s.act][1]}</small>`; }
+  $('#title .btns').insertAdjacentHTML('beforeend', volHTML());
   navMark($('#title'), 0);
   bc.onclick = () => { audioInit(); G.save = s; startGame(false); };
   $('#bNew').onclick = async () => {
@@ -963,7 +1165,7 @@ function frame(ts) {
   ctx.clearRect(0, 0, W, H);
   if (G.state === 'title') { ctx.save(); ctx.translate(0, DY); renderTitle(G.rt); ctx.restore(); }
   else if (G.state === 'scene' && G.sceneDraw) { ctx.save(); ctx.translate(0, DY); G.sceneDraw(G.rt); ctx.restore(); }
-  else if (G.lvl && G.P) { renderWorld(); if (G.trans) drawTransition(); }
+  else if (G.lvl && G.P) { renderWorld(); if (G.state === 'play' && UI.dialog && CONV.partner) drawConversation(); if (G.trans) drawTransition(); }
   else { rect(ctx, 0, 0, W, H, '#000'); }
   if (G.state === 'play') updateHud();
   requestAnimationFrame(frame);

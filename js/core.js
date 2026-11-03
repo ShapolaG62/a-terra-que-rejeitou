@@ -120,18 +120,20 @@ function setupTouch() {
 }
 
 // ---------- Áudio: efeitos sintetizados e trilhas em MP3 ----------
-const AU = { ctx: null, master: null, music: document.getElementById('music'), on: true, biome: null, track: null, musicAttempt: 0, musicPending: false, musicBlocked: false };
+const AU = { ctx: null, master: null, music: document.getElementById('music'), on: true, biome: null, track: null, musicAttempt: 0, musicPending: false, musicBlocked: false, vol: 0.8 };
+// volume geral (0 a 1): vale para os efeitos, as trilhas e o vídeo da abertura
+function auGain() { return AU.on ? 0.55 * AU.vol : 0; }
 function audioInit() {
   AU.musicBlocked = false; musicTick();
   if (AU.ctx) { if (AU.ctx.state === 'suspended') AU.ctx.resume(); return; }
   try {
     AU.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    AU.master = AU.ctx.createGain(); AU.master.gain.value = AU.on ? 0.55 : 0; AU.master.connect(AU.ctx.destination);
+    AU.master = AU.ctx.createGain(); AU.master.gain.value = auGain(); AU.master.connect(AU.ctx.destination);
   } catch (e) { AU.ctx = null; }
 }
 function setSound(on) {
   AU.on = on;
-  if (AU.master) AU.master.gain.value = on ? 0.55 : 0;
+  if (AU.master) AU.master.gain.value = auGain();
   AU.music.muted = !on;
   const video = document.getElementById('introVideo');
   if (video) video.muted = !on;
@@ -141,7 +143,21 @@ function setSound(on) {
 }
 try { AU.on = localStorage.getItem('terra-som') !== '0'; } catch (e) {}
 AU.music.muted = !AU.on;
-AU.music.volume = 0.35;
+try { const v = parseFloat(localStorage.getItem('terra-vol')); if (v >= 0 && v <= 1) AU.vol = v; } catch (e) {}
+AU.music.volume = 0.35 * AU.vol;
+function setVolume(v) {
+  AU.vol = Math.round(clamp(v, 0, 1) * 20) / 20;
+  if (AU.master) AU.master.gain.value = auGain();
+  AU.music.volume = 0.35 * AU.vol;
+  const video = document.getElementById('introVideo');
+  if (video) video.volume = AU.vol;
+  for (const r of document.querySelectorAll('input[data-vol]')) { r.value = Math.round(AU.vol * 100); r.nextElementSibling.textContent = Math.round(AU.vol * 100) + '%'; }
+  try { localStorage.setItem('terra-vol', String(AU.vol)); } catch (e) {}
+}
+// controle deslizante de volume (pausa e título); arrastar com o dedo/mouse ou ← → no teclado/controle
+function volHTML() { const p = Math.round(AU.vol * 100); return `<label class="vol"><span>Volume</span><input type="range" min="0" max="100" step="5" value="${p}" data-vol aria-label="Volume"><b>${p}%</b></label>`; }
+document.addEventListener('input', e => { if (e.target.matches('input[data-vol]')) { audioInit(); setVolume(e.target.value / 100); } });
+document.addEventListener('change', e => { if (e.target.matches('input[data-vol]')) SFX.ui(); });
 function tone(freq, dur, type = 'square', vol = 0.12, slide = 0, delay = 0, dest) {
   if (!AU.ctx) return;
   const t = AU.ctx.currentTime + delay;

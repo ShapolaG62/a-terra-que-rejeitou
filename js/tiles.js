@@ -312,8 +312,12 @@ function drawCanopy(cn, b, t) {
 // tronco de árvore ao fundo, sustentando uma copa (ou um tufo de cipós): da copa até o chão
 function drawTreeTrunk(x, w, top, b, seed) {
   x = Math.round(x);
-  const gy = Math.min(groundY(x), 240), h = Math.max(10, gy - top), key = `trunk-${b}-${w}-${h}-${seed % 5}`;
-  const img = tcache(key, w + 30, h + 8, (c) => {
+  const gy = Math.min(groundY(x), 240), h = Math.max(10, gy - top), img = trunkPiece(b, w, h, seed);
+  // ao fundo: um pouco mais escuro que o primeiro plano
+  ctx.globalAlpha = 0.92; ctx.drawImage(img, x - 15 - Math.floor(w / 2), top); ctx.globalAlpha = 1;
+}
+function trunkPiece(b, w, h, seed) {
+  return tcache(`trunk-${b}-${w}-${h}-${seed % 5}`, w + 30, h + 8, (c) => {
     const P = tpal(b), r = seeded(seed * 3 + w), L = 15, R = 15 + w;
     // galhos subindo para os lados da copa
     for (const dir of [-1, 1]) { const by = 6 + r() * 8; strokePath(c, curve(L + w / 2, by + 4, L + w / 2 + dir * (w * 0.7), by, L + w / 2 + dir * (w + 4 + r() * 3), 1, 10), w > 9 ? 3 : w > 7 ? 2 : 1, P.bark[1], P.out); }
@@ -324,8 +328,6 @@ function drawTreeTrunk(x, w, top, b, seed) {
     for (let i = 0; i < h / 30 + 1; i++) { const ky = 8 + r() * (h - 16), kx = L + 2 + r() * (w - 4); rect(c, kx - 1, ky, 3, 2, P.out); rect(c, kx - 1, ky - 1, 2, 1, P.bark[1]); }
     for (let i = 0; i < h / 12; i++) if (r() < 0.6) rect(c, L + (r() < 0.5 ? 0 : w - 2), 4 + r() * (h - 8), 2, 2 + (r() * 3 | 0), P.moss[1]);
   });
-  // ao fundo: um pouco mais escuro que o primeiro plano
-  ctx.globalAlpha = 0.92; ctx.drawImage(img, x - 15 - Math.floor(w / 2), top); ctx.globalAlpha = 1;
 }
 // 05 cipós pendentes (primeiro plano): um tufo de folhas no alto e cipós com musgo
 function drawHangingVines(o, b, t) {
