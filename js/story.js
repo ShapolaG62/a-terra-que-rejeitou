@@ -134,34 +134,37 @@ function closeMenu(act) { const r = UI.menu.res; UI.menu = false; mEl.hidden = t
 function navMark(root, i) { const bs = [...root.querySelectorAll('.btn:not([hidden])')]; bs.forEach((b, k) => b.classList.toggle('sel', k === i)); return bs; }
 function navTick(root, state) {
   const bs = [...root.querySelectorAll('.btn:not([hidden])')]; if (!bs.length) return;
-  if ((I.pressed.left || I.pressed.right) && root.querySelector('input[data-vol]')) { audioInit(); setVolume(AU.vol + (I.pressed.right ? 0.1 : -0.1)); SFX.ui(); }
+  const vr = bs[state.sel] && bs[state.sel].querySelector('input[data-vol]');
+  if ((I.pressed.left || I.pressed.right) && vr) { const k = vr.dataset.vol; audioInit(); setVolume(k, AU[k] + (I.pressed.right ? 0.1 : -0.1)); (k === 'sfx' ? SFX.hit : SFX.ui)(); }
   if (I.pressed.up || I.pressed.down) { state.sel = (state.sel + (I.pressed.down ? 1 : bs.length - 1)) % bs.length; navMark(root, state.sel); bs[state.sel].scrollIntoView({ block: 'nearest' }); SFX.ui(); }
   if (I.pressed.confirm || I.pressed.attack || I.pressed.interact) { const b = bs[state.sel]; if (b && !b.disabled) b.click(); }
   if ((I.pressed.pause || I.pressed.inv) && UI.menu) { const back = root.querySelector('[data-act="back"]'); if (back) back.click(); }
 }
 
 // ---------- HUD ----------
-const hud = { hp: $('#hud .hp i'), hpb: $('#hud .hp b'), hpBar: $('#hud .hp'), st: $('#hud .st i'), stBar: $('#hud .st'), heat: $('#hud .heat i'), heatBar: $('#hud .heat'), br: $('#hud .breath i'), brBar: $('#hud .breath'), fl: $('#flasks'), mem: $('#mem'), form: $('#formName'), boss: $('#bossbar'), bn: $('#bossbar .nm'), bi: $('#bossbar i'), bb: $('#bossbar b'), cache: {} };
+const hud = { el: $('#hud'), boss: $('#bossbar'), cache: {} };
 function setC(k, v, fn) { if (hud.cache[k] !== v) { hud.cache[k] = v; fn(v); } }
 function updateHud() {
   const P = G.P; if (!P) return;
-  const m = statMax();
-  setC('hpw', m.hp, v => hud.hpBar.style.width = Math.min(100, 50 + v / 6) + '%');
-  setC('hp', Math.max(0, P.hp / m.hp * 100).toFixed(1), v => { hud.hp.style.width = v + '%'; hud.hpb.style.width = v + '%'; });
-  setC('st', Math.max(0, P.st / m.st * 100).toFixed(0), v => hud.st.style.width = v + '%');
-  setC('heatOn', G.lvl.biome === 'caatinga', v => hud.heatBar.hidden = !v);
-  setC('br', Math.round(P.breath == null ? 100 : P.breath), v => { hud.brBar.hidden = v >= 100; hud.br.style.width = v + '%'; });
-  setC('heat', G.heat.toFixed(0), v => { hud.heat.style.width = v + '%'; hud.heatBar.classList.toggle('hot', +v >= 100); });
-  setC('fl', P.flasks + '/' + m.flasks + (P.ab.heal ? '' : 'x'), () => { hud.fl.innerHTML = P.ab.heal ? Array.from({ length: m.flasks }, (_, i) => `<i class="${i < P.flasks ? '' : 'off'}"></i>`).join('') : ''; });
-  setC('mem', G.save.mem, v => hud.mem.textContent = '◆ ' + v);
   const B = G.boss;
-  setC('boss', B ? B.kind + (B.st === 'down') : '', v => { hud.boss.hidden = !B || B.st === 'down' || B.kind === 'lobo' && false; if (B) hud.bn.textContent = BOSSES[B.kind].nome; });
-  if (B && B.chains != null) setC('bhp', 'c' + B.chains, () => { hud.bn.textContent = BOSSES[B.kind].nome + '  ·  correntes ' + '⛓'.repeat(B.chains) + '·'.repeat(3 - B.chains); hud.bi.style.width = hud.bb.style.width = (B.chains / 3 * 100) + '%'; });
-  else if (B) setC('bhp', (B.hp / B.hpMax * 100).toFixed(1), v => { hud.bi.style.width = v + '%'; hud.bb.style.width = v + '%'; });
+  setC('boss', B ? B.kind + (B.st === 'down') : '', () => { hud.boss.hidden = !B || B.st === 'down'; });
   const sw = $('#touch [data-a="swap"]');
   setC('swap', G.save.forms.length > 2 && G.lvl.biome === 'mata' && !G.flags.final, v => sw.hidden = !v);
 }
-function updateHudForm() { const f = FORMS[G.P.form] || FORMS.espirito; hud.form.textContent = f.nome + (f.povo ? ' · ' + f.povo : ''); }
+function updateHudForm() { drawHudFace(); }
+// rosto da forma atual no medalhão (desenha o corpo pequeno e recorta a cabeça)
+const faceC = document.createElement('canvas'); faceC.width = 40; faceC.height = 64;
+function drawHudFace() {
+  const fc = $('#hudFace'), x = faceC.getContext('2d'); if (!fc || !G.P) return;
+  x.clearRect(0, 0, 40, 64); drawHuman(x, 20, 62, 1, { kind: 'idle', t: 0 }, playerSpec(G.P.form));
+  const d = x.getImageData(0, 0, 40, 64).data, op = (xx, y) => d[(y * 40 + xx) * 4 + 3] > 0; let y0 = 0;
+  find: for (let y = 0; y < 64; y++) for (let xx = 0; xx < 40; xx++) if (op(xx, y)) { y0 = y; break find; }
+  // centro do rosto: média das colunas ocupadas na altura da cabeça (pula enfeites altos como penas e cocar)
+  let sx = 0, n = 0; for (let y = y0 + 4; y < y0 + 12; y++) for (let xx = 0; xx < 40; xx++) if (op(xx, y)) { sx += xx; n++; }
+  const cx = n ? Math.round(sx / n) : 20;
+  fc.width = fc.height = 18; const f = fc.getContext('2d'); f.clearRect(0, 0, 18, 18);
+  f.drawImage(faceC, cx - 9, Math.max(0, y0 + 1), 18, 18, 0, 0, 18, 18);
+}
 
 // ---------- Ecos do Corpo-seco e notas ----------
 function journalHTML() {
@@ -200,7 +203,7 @@ async function fireMenu() {
     if (a === 'look') {
       const n = variantesLiberadas(), quando = ['', '', 'libera no Pantanal', 'libera na Mata Atlântica'];
       const b = await menu(`<h2>Visual do espírito</h2><p>O jeito com que o espírito veste as formas dos povos.</p><div class="btns">${VARIANTE_NOMES.map((nm, i) => `<button class="btn" data-act="v${i}" ${i < n ? '' : 'disabled'}>${nm} <small>${i < n ? (i === varianteAtual() ? 'em uso' : 'liberado') : quando[i]}</small></button>`).join('')}<button class="btn" data-act="back">Voltar</button></div>`);
-      if (b && b[0] === 'v') { G.save.look = +b.slice(1); writeSave(); }
+      if (b && b[0] === 'v') { G.save.look = +b.slice(1); writeSave(); drawHudFace(); }
       continue;
     }
     if (a === 'go') { const to = await travelMenu(); if (to) { await travelTo(to); return; } continue; }
@@ -218,6 +221,17 @@ async function fireMenu() {
 }
 // tecla I / Tab (ou o botão ▤ no celular): abre o inventário com os itens dos baús
 async function openInventory() { G.paused = true; await menu(inventoryHTML()); G.paused = false; }
+// configuração de som: liga/desliga e os três volumes
+async function soundMenu() {
+  for (;;) {
+    const a = await menu(`<h2>Som</h2><div class="btns">
+      <button class="btn" data-act="m">Som <small>${AU.on ? 'ligado' : 'desligado'}</small></button>
+      ${volHTML('vol', 'Volume geral')}${volHTML('mus', 'Música')}${volHTML('sfx', 'Efeitos e ações')}
+      <button class="btn" data-act="back">Voltar</button></div><p class="hint">Efeitos e ações: golpes, dano, passos, pulos, curas e interações.</p>`);
+    if (a === 'm') { audioInit(); setSound(!AU.on); continue; }
+    break;
+  }
+}
 async function pauseMenu() {
   G.paused = true;
   for (;;) {
@@ -226,15 +240,14 @@ async function pauseMenu() {
       <button class="btn" data-act="s">Espírito</button><button class="btn" data-act="itens">Inventário</button>
       <button class="btn" data-act="j">Diário <small>${G.save.echoes.length}/6 ecos</small></button>
       <button class="btn" data-act="k">Controles</button>
-      <button class="btn" data-act="m">Som <small>${AU.on ? 'ligado' : 'desligado'}</small></button>
-      ${volHTML()}
+      <button class="btn" data-act="som">Som <small>${AU.on ? 'ligado' : 'desligado'} · ${Math.round(AU.vol * 100)}%</small></button>
       <button class="btn" data-act="t">Voltar ao título</button></div>`);
     if (a === 'back') break;
     if (a === 's') await menu(statsHTML(false));
     if (a === 'itens') await menu(inventoryHTML());
     if (a === 'j') await menu(journalHTML());
     if (a === 'k') await menu(keysHTML());
-    if (a === 'm') { audioInit(); setSound(!AU.on); }
+    if (a === 'som') await soundMenu();
     if (a === 't') { writeSave(); location.reload(); return; }
   }
   G.paused = false;
@@ -311,7 +324,7 @@ function caveCeiling(x0, x1, mouth, dir, t) {
 }
 function drawTravel(k, tt, A, B, from, to, card, form) {
   const V = travelWorld(from, to), cam = Math.round(tt * VIAGEM_VEL), top = -DY, bot = H - DY;
-  const pxW = cam + VIAGEM_PX, e0 = clamp((pxW - (V.Xb - 70)) / 140, 0, 1), e = e0 * e0 * (3 - 2 * e0);
+  const heroX = cam + VIAGEM_PX, e0 = clamp((heroX - (V.Xb - 70)) / 140, 0, 1), e = e0 * e0 * (3 - 2 * e0);
   // fundo: o céu e as camadas do bioma de saída cedem para o de chegada quando o espírito cruza a fronteira
   drawBackground(A, cam, tt);
   if (e > 0) { ctx.globalAlpha = e; drawBackground(B, cam, tt); ctx.globalAlpha = 1; }
@@ -333,8 +346,8 @@ function drawTravel(k, tt, A, B, from, to, card, form) {
   // tronco caído no caminho: o espírito pula por cima
   ctx.drawImage(logPiece(V.bio(V.hopX)), V.hopX - 17, GY - 18);
   // o espírito correndo com a forma que está usando (e a chama do fogo frio, se já tiver)
-  const dh = pxW - V.hopX + 34, air = dh > 0 && dh < 52, jy = air ? Math.round(-Math.sin(dh / 52 * Math.PI) * 22) : 0;
-  const px = pxW, py = GY + jy;
+  const dh = heroX - V.hopX + 34, air = dh > 0 && dh < 52, jy = air ? Math.round(-Math.sin(dh / 52 * Math.PI) * 22) : 0;
+  const px = heroX, py = GY + jy;
   if (form === 'espirito') { ctx.globalAlpha = 0.15; ell(ctx, px, py - 13, 12, 16, '#8a7ab0'); ctx.globalAlpha = 1; }
   // riscos de vento passando pelo corpo (dá a sensação de velocidade)
   for (let i = 0; i < 5; i++) { const p = (tt * 2.2 + i * 0.37) % 1, wy = py - 8 - (i * 9) % 34; ctx.globalAlpha = 0.35 * Math.sin(p * Math.PI); rect(ctx, px + 14 - p * 46, wy, 8 + (i % 3) * 4, 1, '#f4ecd8'); }
@@ -349,7 +362,7 @@ function drawTravel(k, tt, A, B, from, to, card, form) {
   // bando de pássaros cruzando o céu (morcegos na gruta)
   const birdT = (tt - 1.2) / 3.4;
   if (birdT > 0 && birdT < 1) {
-    const cave = V.bio(pxW) === 'gruta', col = cave ? '#1a1412' : tpal(V.bio(pxW)).out;
+    const cave = V.bio(heroX) === 'gruta', col = cave ? '#1a1412' : tpal(V.bio(heroX)).out;
     for (let i = 0; i < 6; i++) {
       const bx = W + 20 - birdT * (W + 80) + i * 13 + (i % 2) * 6, by = top + 30 + i * 5 - (i % 3) * 9 + Math.sin(tt * 3 + i) * 3, fl = Math.sin(tt * 14 + i * 1.7) > 0 ? -1 : 1;
       rect(ctx, bx, by, 2, 1, col); rect(ctx, bx - 2, by + fl, 2, 1, col); rect(ctx, bx + 2, by + fl, 2, 1, col);
@@ -375,27 +388,24 @@ function drawTravel(k, tt, A, B, from, to, card, form) {
     ctx.save(); ctx.globalAlpha = ta * 0.5;
     const g = ctx.createLinearGradient(0, y0, 0, y0 + 82); g.addColorStop(0, '#0a080600'); g.addColorStop(0.25, '#0a0806'); g.addColorStop(0.75, '#0a0806'); g.addColorStop(1, '#0a080600');
     ctx.fillStyle = g; ctx.fillRect(0, y0, W, 82);
-    const sh = (str, x, y, col) => { ctx.fillStyle = '#0a0806'; ctx.fillText(str, x + 1, y + 1); ctx.fillStyle = col; ctx.fillText(str, x, y); };
-    ctx.textAlign = 'center';
-    ctx.globalAlpha = ta * clamp(ts / 0.5, 0, 1); ctx.font = '600 10px "Pixelify Sans", monospace';
-    sh(card[0].toUpperCase().split('').join(' '), W / 2, y0 + 12 - Math.round((1 - clamp(ts / 0.5, 0, 1)) * 6), '#f2c14e');
+    ctx.globalAlpha = ta * clamp(ts / 0.5, 0, 1);
+    drawPx(card[0].toUpperCase(), W / 2, y0 + 4 - Math.round((1 - clamp(ts / 0.5, 0, 1)) * 6), { align: 'center', sp: 2, col: '#ffd870', col2: '#c8902a' });
     // título, uma letra de cada vez subindo
-    ctx.font = '700 26px "Pixelify Sans", monospace'; ctx.textAlign = 'left';
-    const T = card[1], tw = ctx.measureText(T).width; let lx = W / 2 - tw / 2;
-    for (let i = 0; i < T.length; i++) {
-      const p = clamp((ts - 0.25 - i * 0.045) / 0.25, 0, 1), cw = ctx.measureText(T[i]).width;
-      if (p > 0) { ctx.globalAlpha = ta * p; sh(T[i], Math.round(lx), Math.round(y0 + 40 + (1 - p) * 8), p < 1 ? '#ffffff' : '#f4ecd8'); }
-      lx += cw;
+    const T = card[1], TS = 3, tw = pxW(T) * TS; let lx = W / 2 - tw / 2, li = 0;
+    for (const ch of T) {
+      const p = clamp((ts - 0.25 - li * 0.045) / 0.25, 0, 1);
+      if (p > 0) { ctx.globalAlpha = ta * p; drawPx(ch, lx, y0 + 18 + Math.round((1 - p) * 8), { s: TS, col: p < 1 ? '#ffffff' : '#fff4dc', col2: p < 1 ? '#ffffff' : '#d8c098' }); }
+      lx += (pxGlyph(ch).w + 1) * TS; li++;
     }
     // traço dourado abrindo do centro, com losangos nas pontas
     const lp = clamp((ts - 0.6) / 0.6, 0, 1), lw = Math.round((tw / 2 + 14) * lp * (2 - lp));
     if (lw > 0) {
-      ctx.globalAlpha = ta; rect(ctx, W / 2 - lw, y0 + 47, lw * 2, 1, '#f2c14e'); rect(ctx, W / 2 - lw, y0 + 48, lw * 2, 1, '#8a6a2a');
-      for (const s of [-1, 1]) { const dx = W / 2 + s * lw; rect(ctx, dx - 1, y0 + 46, 3, 3, '#f2c14e'); rect(ctx, dx, y0 + 45, 1, 5, '#f2c14e'); }
+      ctx.globalAlpha = ta; rect(ctx, W / 2 - lw, y0 + 49, lw * 2, 1, '#f2c14e'); rect(ctx, W / 2 - lw, y0 + 50, lw * 2, 1, '#8a6a2a');
+      for (const s of [-1, 1]) { const dx = W / 2 + s * lw; rect(ctx, dx - 1, y0 + 48, 3, 3, '#f2c14e'); rect(ctx, dx, y0 + 47, 1, 5, '#f2c14e'); }
     }
-    ctx.textAlign = 'center';
-    if (card[2]) { ctx.globalAlpha = ta * clamp((ts - 0.9) / 0.4, 0, 1); ctx.font = '600 10px "Pixelify Sans", monospace'; sh(card[2], W / 2, y0 + 61, '#e0a070'); }
-    if (card[3]) { const n = Math.floor(clamp((ts - 1.2) * 40, 0, card[3].length)); ctx.globalAlpha = ta; ctx.font = '400 10px "Pixelify Sans", monospace'; sh(card[3].slice(0, n), W / 2, y0 + 75, '#e8dcc0'); }
+    if (card[2]) { ctx.globalAlpha = ta * clamp((ts - 0.9) / 0.4, 0, 1); drawPx(card[2], W / 2, y0 + 55, { align: 'center', col: '#ffb880', col2: '#c86a3a' }); }
+    // a frase vai sendo escrita (centrada pela frase inteira, para não pular de lugar)
+    if (card[3]) { const n = Math.floor(clamp((ts - 1.2) * 40, 0, card[3].length)); ctx.globalAlpha = ta; drawPx(card[3].slice(0, n), W / 2 - pxW(card[3]) / 2, y0 + 67, { col: '#f4ead4', col2: '#c8b898' }); }
     ctx.restore();
   }
   // rota da jornada: de onde vem para onde vai
@@ -406,9 +416,9 @@ function drawTravel(k, tt, A, B, from, to, card, form) {
   rect(ctx, x0, ry, mx - x0, 1, '#f2c14e');
   ROTA.forEach((id, i) => { const x = Math.round(x0 + i * step), done = i <= i0 || (i === i1 && pe >= 1); rect(ctx, x - 2, ry - 2, 5, 5, '#0a0806'); rect(ctx, x - 1, ry - 1, 3, 3, done ? '#f2c14e' : i === i1 ? (Math.sin(tt * 6) > 0 ? '#f4ecd8' : '#8a7a6a') : '#4a4038'); });
   rect(ctx, Math.round(mx) - 1, ry - 6 + Math.round(Math.sin(tt * 8)), 3, 3, '#bfe4ff'); rect(ctx, Math.round(mx), ry - 7 + Math.round(Math.sin(tt * 8)), 1, 1, '#ffffff');
-  ctx.font = '500 9px "Pixelify Sans", monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#c8b8a0';
-  ctx.fillText(ROTA_NOME[from] || '', x0 + i0 * step, ry + 12); ctx.fillStyle = '#f4ecd8'; ctx.fillText(ROTA_NOME[to] || '', x0 + i1 * step, ry + 12);
-  if (tt > 1) { ctx.textAlign = 'right'; ctx.fillStyle = '#8a7a6a'; ctx.globalAlpha *= 0.8; ctx.fillText(L.touch ? 'toque para pular' : 'Enter: pular', W - 6, top + lb - 8); }
+  drawPx(ROTA_NOME[from] || '', x0 + i0 * step, ry + 4, { align: 'center', col: '#c8b8a0', col2: '#9a8a74' });
+  drawPx(ROTA_NOME[to] || '', x0 + i1 * step, ry + 4, { align: 'center', col: '#fff4dc', col2: '#e0c890' });
+  if (tt > 1) { ctx.globalAlpha *= 0.85; drawPx(L.touch ? 'toque para pular' : 'Enter: pular', W - 6, top + lb - 16, { align: 'right', col: '#b8a88a', col2: '#8a7a6a' }); }
   ctx.globalAlpha = 1; ctx.textAlign = 'left';
 }
 async function enterAct(n, o = {}) {
@@ -1096,7 +1106,8 @@ function setupTitle() {
   const s = loadSave();
   const bc = $('#bContinue');
   if (s && !s.done) { bc.hidden = false; bc.innerHTML = `Continuar <small>${CARDS[s.act][0]} · ${CARDS[s.act][1]}</small>`; }
-  $('#title .btns').insertAdjacentHTML('beforeend', volHTML());
+  $('#bKeys').insertAdjacentHTML('afterend', '<button class="btn" id="bSom">Som</button>');
+  $('#bSom').onclick = async () => { audioInit(); $('#title').hidden = true; await soundMenu(); $('#title').hidden = false; };
   navMark($('#title'), 0);
   bc.onclick = () => { audioInit(); G.save = s; startGame(false); };
   $('#bNew').onclick = async () => {
@@ -1165,7 +1176,7 @@ function frame(ts) {
   ctx.clearRect(0, 0, W, H);
   if (G.state === 'title') { ctx.save(); ctx.translate(0, DY); renderTitle(G.rt); ctx.restore(); }
   else if (G.state === 'scene' && G.sceneDraw) { ctx.save(); ctx.translate(0, DY); G.sceneDraw(G.rt); ctx.restore(); }
-  else if (G.lvl && G.P) { renderWorld(); if (G.state === 'play' && UI.dialog && CONV.partner) drawConversation(); if (G.trans) drawTransition(); }
+  else if (G.lvl && G.P) { renderWorld(); drawHudCanvas(); if (G.state === 'play' && UI.dialog && CONV.partner) drawConversation(); if (G.trans) drawTransition(); }
   else { rect(ctx, 0, 0, W, H, '#000'); }
   if (G.state === 'play') updateHud();
   requestAnimationFrame(frame);

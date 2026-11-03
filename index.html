@@ -25,29 +25,8 @@ button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none
 #cv{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
 
 /* ---------- HUD ---------- */
-#hud{position:absolute;left:1.6%;top:3%;display:flex;flex-direction:column;gap:.3em;pointer-events:none;width:38%}
-.bar{position:relative;height:.62em;background:#0008;border:2px solid var(--ink);box-shadow:0 0 0 1px #ffffff1a}
-.bar i{position:absolute;left:0;top:0;bottom:0;width:100%;transition:width .12s}
-.bar b{position:absolute;left:0;top:0;bottom:0;width:100%;background:#fff6;transition:width .5s .25s}
-.bar.hp i{background:linear-gradient(#d85a3c,#9c2f22)}
-.bar.st{height:.45em;width:80%}
-.bar.st i{background:linear-gradient(#9fd18a,#4f8f4a)}
-.bar.heat{height:.45em;width:80%}
-.bar.heat i{background:linear-gradient(#ffd27a,#e0703a)}
-.bar.breath{height:.45em;width:80%}
-.bar.breath i{background:linear-gradient(#bfe8f8,#5aa8d0)}
-.bar.heat.hot i{background:linear-gradient(#ff8a5a,#c8402e);animation:pulse .4s infinite alternate}
-@keyframes pulse{to{opacity:.55}}
-.hrow{display:flex;align-items:center;gap:.6em;font-size:.85em;text-shadow:1px 1px 0 #000}
-#flasks{display:flex;gap:2px}
-#flasks i{width:.55em;height:.75em;border-radius:45% 45% 50% 50%;background:var(--gold);border:1px solid var(--ink);display:block}
-#flasks i.off{background:#3a3226}
-#mem{color:#f6e3a6}
-#formName{color:var(--mut);font-size:.85em;white-space:nowrap}
-#bossbar{position:absolute;left:15%;right:15%;bottom:5%;text-align:center;pointer-events:none}
-#bossbar .nm{font-size:.9em;letter-spacing:.08em;text-shadow:1px 1px 0 #000;margin-bottom:.2em}
-#bossbar .bar{height:.55em}
-#bossbar .bar i{background:linear-gradient(#b8a26a,#7a5a2a)}
+/* o HUD (vida, estamina, frascos, barra dos guardiões) é desenhado em pixel art no canvas: js/hudart.js */
+#hud,#bossbar{display:none!important}
 #toast{position:absolute;left:0;right:0;top:26%;text-align:center;pointer-events:none;opacity:0;transition:opacity .6s}
 #toast.on{opacity:1}
 #toast .big{font-size:2.1em;font-weight:700;letter-spacing:.06em;text-shadow:2px 2px 0 #000;color:var(--cream)}
@@ -88,6 +67,9 @@ button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none
 .btn:hover,.btn:focus-visible,.btn.sel{border-color:var(--gold);outline:none;background:#33261e}
 .btn small{color:var(--mut);font-size:13px}
 .vol{display:flex;align-items:center;gap:10px;padding:6px 14px;background:#1a1416;border:2px solid #4a3c30;font-size:15px}
+.btn.vol{justify-content:flex-start;cursor:default}
+.vol span{min-width:7.5em}
+.panel p.hint{font-size:13px;color:var(--mut);margin:10px 0 0}
 .vol span{color:var(--cream)}
 .vol input{flex:1;min-width:0;height:28px;accent-color:var(--gold);cursor:pointer}
 .vol b{min-width:2.8em;text-align:right;color:var(--gold);font-weight:600;font-size:14px}
@@ -196,15 +178,8 @@ body.landscape #touch .acts .sm{width:44px;height:44px}
 <div id="stage">
   <canvas id="cv" width="432" height="243"></canvas>
   <div id="float"></div>
-  <div id="hud" hidden>
-    <div class="bar hp"><b></b><i></i></div>
-    <div class="bar st"><i></i></div>
-    <div class="bar heat" hidden><i></i></div>
-    <div class="bar breath" hidden><i></i></div>
-    <div class="hrow"><span id="flasks"></span><span id="mem">◆ 0</span></div>
-    <div class="hrow"><span id="formName"></span></div>
-  </div>
-  <div id="bossbar" hidden><div class="nm"></div><div class="bar"><b></b><i></i></div></div>
+  <div id="hud" hidden><canvas id="hudFace" width="18" height="18"></canvas></div>
+  <div id="bossbar" hidden></div>
   <div id="toast"><div class="big"></div><div class="sm"></div></div>
   <div id="hint"></div>
   <div id="prompt" hidden></div>
@@ -264,6 +239,8 @@ body.landscape #touch .acts .sm{width:44px;height:44px}
 <script src="js/intro.js"></script>
 <script src="js/bosses.js"></script>
 <script src="js/beasts.js"></script>
+<script src="js/pxfont.js"></script>
+<script src="js/hudart.js"></script>
 <script src="js/story.js"></script>
 <script src="js/gruta.js"></script>
 </body>

@@ -33,7 +33,7 @@ function nextIntroClip() {
   if (INTRO.index >= INTRO.clips.length) { finishIntro(); return; }
   const video = $('#introVideo');
   video.src = INTRO.clips[INTRO.index];
-  video.muted = !AU.on; video.volume = AU.vol;
+  video.muted = !AU.on; video.volume = musicVol();
   video.load();
   video.defaultPlaybackRate = 1.5;
   video.playbackRate = 1.5;
