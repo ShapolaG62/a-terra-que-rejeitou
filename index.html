@@ -90,6 +90,19 @@ button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none
 #intro .btn{background:#120e12e6;justify-content:center}
 #intro .intro-footer{position:absolute;left:max(20px,env(safe-area-inset-left));right:max(20px,env(safe-area-inset-right));bottom:max(20px,env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:space-between;gap:16px}
 #introStatus{color:var(--cream);font-size:14px;text-shadow:1px 1px #000}
+#intro .intro-start{background:radial-gradient(ellipse at center,#252316 0%,#10140e 45%,#070b08 100%);z-index:2}
+#intro .start-art{position:relative;flex:none;width:100%;height:100%}
+#intro .start-emblem{position:absolute;left:50%;top:50%;width:clamp(100px,min(23vw,34vh),260px);aspect-ratio:1;transform:translate(-50%,-50%);display:block;padding:0;border:0;border-radius:50%;background:transparent;box-shadow:none;cursor:pointer}
+#intro .start-emblem{isolation:isolate}
+#intro .start-emblem::before,#intro .start-emblem::after{content:'';position:absolute;inset:-20%;z-index:-1;pointer-events:none;border-radius:50%;animation:start-emblem-light 5s ease-in-out infinite}
+#intro .start-emblem::before{background:radial-gradient(ellipse at 28% 35%,#ffcf5cbb,transparent 48%),radial-gradient(ellipse at 74% 42%,#d9ee8e99,transparent 44%),radial-gradient(ellipse at 50% 76%,#f9a43a99,transparent 45%);filter:blur(15px)}
+#intro .start-emblem::after{inset:-10%;background:radial-gradient(circle at 15% 22%,#fff5bb 0 1%,#ffc75b88 2%,transparent 7%),radial-gradient(circle at 88% 30%,#fff3be 0 1%,#ebd67c88 2%,transparent 7%),radial-gradient(circle at 12% 78%,#ffe9a6 0 .8%,#ffbb5288 2%,transparent 6%),radial-gradient(circle at 82% 88%,#fff0af 0 .8%,#e5ca6b88 2%,transparent 7%);filter:blur(2px);animation-delay:-2.5s}
+#intro .start-emblem img{display:block;width:100%;height:100%;border-radius:50%;clip-path:circle(49%);pointer-events:none;animation:start-emblem-breathe 5s ease-in-out infinite}
+#intro .start-emblem:focus-visible{outline:2px solid #d9b77a;outline-offset:6px}
+@keyframes start-emblem-breathe{0%,100%{transform:scale(1);filter:brightness(.97)}50%{transform:scale(1.025);filter:brightness(1.035)}}
+@keyframes start-emblem-light{0%,100%{opacity:.45;transform:scale(.96)}50%{opacity:.9;transform:scale(1.06)}}
+@media(prefers-reduced-motion:reduce){#intro .start-emblem img,#intro .start-emblem::before,#intro .start-emblem::after{animation:none}}
+#intro:has(.intro-start:not([hidden])) .intro-footer{display:none}
 #bIntroSkip{margin-left:auto;font-size:14px;white-space:nowrap}
 
 #card{background:#000;flex-direction:column;text-align:center;cursor:pointer}
@@ -168,7 +181,7 @@ body.landscape #touch .acts .sm{width:44px;height:44px}
 <audio id="music" preload="none" hidden></audio>
 <section id="intro" aria-label="Abertura do jogo">
   <video id="introVideo" preload="auto" playsinline disablepictureinpicture aria-label="Animação de abertura"></video>
-  <div id="introStart" class="intro-start" hidden><button class="btn" id="bIntroPlay">Iniciar jogo</button></div>
+  <div id="introStart" class="intro-start"><div class="start-art"><button class="start-emblem" id="bIntroPlay" aria-label="Iniciar jogo"><img src="assets/ui/start-button.jpg" alt="" draggable="false"></button></div></div>
   <div class="intro-footer">
     <p id="introStatus" role="status">Carregando abertura…</p>
     <button class="btn" id="bIntroSkip">Pular abertura <small>Esc / B</small></button>
@@ -245,5 +258,6 @@ body.landscape #touch .acts .sm{width:44px;height:44px}
 <script src="js/companions.js"></script>
 <script src="js/story.js"></script>
 <script src="js/gruta.js"></script>
+<script src="js/explore.js"></script>
 </body>
 </html>

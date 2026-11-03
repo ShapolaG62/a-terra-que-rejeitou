@@ -11,7 +11,8 @@ function setupIntro() {
   G.state = 'intro';
   $('#title').hidden = true;
   $('#intro').hidden = false;
-  $('#bIntroPlay').onclick = () => { audioInit(); playIntroClip(); };
+  const start = () => { audioInit(); if (INTRO.index < 0) nextIntroClip(); else playIntroClip(); };
+  $('#bIntroPlay').onclick = start;
   $('#bIntroSkip').onclick = () => { audioInit(); finishIntro(); };
   video.addEventListener('ended', () => { if (video.ended) nextIntroClip(); });
   video.addEventListener('error', () => { if (video.error) nextIntroClip(); });
@@ -24,7 +25,10 @@ function setupIntro() {
   video.addEventListener('waiting', () => {
     if (INTRO.active && !INTRO.waiting) $('#introStatus').hidden = false;
   });
-  nextIntroClip();
+  // A arte e o botão aparecem antes de qualquer vídeo ou tentativa de autoplay.
+  INTRO.waiting = true;
+  $('#introStart').hidden = false;
+  $('#introStatus').hidden = true;
 }
 
 function nextIntroClip() {
@@ -60,7 +64,7 @@ function playIntroClip() {
 
 function introTick() {
   if (I.pressed.pause || I.pressed.dodge) finishIntro();
-  else if (INTRO.waiting && I.pressed.confirm) playIntroClip();
+  else if (INTRO.waiting && I.pressed.confirm) { audioInit(); if (INTRO.index < 0) nextIntroClip(); else playIntroClip(); }
 }
 
 function finishIntro() {

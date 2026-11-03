@@ -245,12 +245,14 @@ async function pauseMenu() {
   for (;;) {
     const a = await menu(`<h2>Pausa</h2><p>${G.lvl.name}</p><div class="btns">
       <button class="btn" data-act="back">Continuar</button>
+      ${G.exploring ? '<button class="btn" data-act="explore">Exploração temporária · escolher fase</button>' : ''}
       <button class="btn" data-act="s">Espírito</button><button class="btn" data-act="itens">Inventário</button>
       <button class="btn" data-act="j">Diário <small>${G.save.echoes.length}/6 ecos</small></button>
       <button class="btn" data-act="k">Controles</button>
       <button class="btn" data-act="som">Som <small>${AU.on ? 'ligado' : 'desligado'} · ${Math.round(AU.vol * 100)}%</small></button>
       <button class="btn" data-act="t">Voltar ao título</button></div>`);
     if (a === 'back') break;
+    if (a === 'explore') { await explorationMenu(); break; }
     if (a === 's') await menu(statsHTML(false));
     if (a === 'itens') await menu(inventoryHTML());
     if (a === 'j') await menu(journalHTML());
