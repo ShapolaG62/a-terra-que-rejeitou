@@ -126,7 +126,7 @@ function journalHTML() {
 function keysHTML() {
   return `<h2>Controles</h2><div class="keys">
   <kbd>A D / ← →</kbd><span>andar</span><kbd>W / ↑ / Espaço</kbd><span>pular (segure para pular mais alto; ↓ + pular desce da plataforma)</span>
-  <kbd>J / Z / clique esquerdo</kbd><span>golpe de perto (empurra o monstro)</span><kbd>K / X / clique direito</kbd><span>tiro à distância (mira sozinho no alvo mais perto, até nos voadores)</span><kbd>U / V</kbd><span>especial da forma</span><kbd>L / C / Shift</kbd><span>esquiva (fica invulnerável)</span>
+  <kbd>J / Z / clique esquerdo</kbd><span>golpe de perto (empurra o monstro)</span><kbd>K / X / clique direito</kbd><span>tiro à distância (mira sozinho no alvo mais perto, até nos voadores)</span><kbd>U / V</kbd><span>especial da forma</span><kbd>L / C / Shift</kbd><span>dash (fica invulnerável)</span>
   <kbd>F</kbd><span>beber da cabaça de memória (cura)</span><kbd>E</kbd><span>agir: conversar, descansar, lembrar</span>
   <kbd>Q</kbd><span>trocar de forma (Mata Atlântica)</span>
   <kbd>I / Tab</kbd><span>inventário (itens dos baús)</span><kbd>Esc / P</kbd><span>pausa</span></div>
@@ -407,7 +407,7 @@ const LEVELS = {
     L2.n({ x: 1395, spec: NPC.cacador, f: -1, anim: 'kneel', id: 'cacador' });
     L2.ar(1100, 'lobo');
     L2.tr(30, async () => { hint('<kbd>A</kbd> <kbd>D</kbd> andar · <kbd>W</kbd> / <kbd>Espaço</kbd> pular', '◀ ▶ para andar · <b>Pular</b> para pular', 6); });
-    L2.tr(210, async () => { hint('<kbd>J</kbd> / clique esquerdo: golpe de perto · <kbd>K</kbd> / clique direito: tiro · <kbd>L</kbd> esquivar', '<b>Golpe</b> de perto · <b>Tiro</b> à distância · <b>Esquiva</b> rola sem tomar dano', 7); });
+    L2.tr(210, async () => { hint('<kbd>J</kbd> / clique esquerdo: golpe de perto · <kbd>K</kbd> / clique direito: tiro · <kbd>L</kbd> dash', '<b>Golpe</b> de perto · <b>Tiro</b> à distância · <b>Dash</b> avança sem tomar dano', 7); });
     L2.tr(560, async () => { hint('<kbd>F</kbd> beber da cabaça (cura) · <kbd>E</kbd> agir', '<b>Cura</b> bebe da cabaça · <b>Agir</b> conversa e descansa', 6); });
     L2.tr(1050, async () => {
       if (G.save.seen.prolEvent) return;
@@ -650,7 +650,7 @@ BOSSES.lobo = {
 const STORY = {
   async bossDown(B) {
     const k = B.kind, A = G.lvl.arena;
-    musicSet(null); G.dark = 0; G.heatMul = 1; G.dynShade = [];
+    musicSet('victory'); G.dark = 0; G.heatMul = 1; G.dynShade = [];
     await wait(1.2);
     if (k === 'lobo') {
       for (let i = 0; i < 40; i++) part(B.x + rnd(-12, 12), B.y - rnd(0, 14), rnd(-30, 30), rnd(-60, -10), 1.4, pick(['#1c1622', '#3a3448', '#ffe066']));
@@ -741,7 +741,7 @@ const STORY = {
 
   async corpoStill(B) {
     scene(async () => {
-      G.boss.contact = 0; hud.boss.hidden = true; musicSet('coracao');
+      G.boss.contact = 0; hud.boss.hidden = true; musicSet('victory');
       await wait(0.8);
       const [a0, a1] = arenaX();
       for (let k = 0; k < 14; k++) part(B.x, B.y - 16, rnd(-50, 50), rnd(-50, 20), 0.6, '#6a5a48');
@@ -906,6 +906,7 @@ function setupTitle() {
 }
 async function startGame(fresh) {
   $('#title').hidden = true;
+  musicSet('theme');
   G.state = 'card';
   if (fresh) {
     await showCard('', 'Antes da ferida', '', 'A mata funcionava por um pacto. O Espírito da Mata e os guardiões cuidavam do equilíbrio. Os povos faziam a outra metade: contavam as histórias, cantavam, plantavam e respeitavam os limites.', 1.2);
@@ -946,7 +947,8 @@ function frame(ts) {
   if (I.pressed.debug) G.debug = !G.debug;
   G.rt += dt;
   for (const w of G.waits.slice()) { if (w.fn ? w.fn() : (w.t -= (UI.dialog || UI.menu ? 0 : dt)) <= 0) { G.waits.splice(G.waits.indexOf(w), 1); w.res(); } }
-  if (UI.card) cardTick();
+  if (G.state === 'intro') introTick();
+  else if (UI.card) cardTick();
   else if (UI.menu) navTick(mPanel, UI.menu);
   else if (UI.dialog) dialogTick(dt);
   else if (G.state === 'title') { if (!$('#title').hidden) navTick($('#title'), titleNav); }
@@ -970,4 +972,5 @@ function frame(ts) {
 setupTouch();
 layout();
 setupTitle();
+setupIntro();
 requestAnimationFrame(frame);

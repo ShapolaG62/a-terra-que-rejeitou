@@ -4,9 +4,8 @@
 // Encarcerado (vence quem quebra as correntes, não quem mata) e o Olho de Fogo Frio, que purifica os
 // Cipós-de-Sangue espalhados pelo mundo e abre caminhos em regiões já visitadas.
 
-// ---------- Paleta, fundo e música ----------
+// ---------- Paleta e fundo ----------
 TPAL.gruta = { moss: ['#2a3a34', '#3a5248', '#5a8a6a'], soil: ['#2a221e', '#1c1714', '#3a2e28'], stone: ['#4a4038', '#625448', '#2e2722'], root: ['#3a2a22', '#523a2c', '#6a4a36'], bark: ['#3a2c22', '#523e30', '#241a14'], fern: ['#2a4038', '#3a5a4a', '#5a8a6a'], thorn: ['#5a2a2a', '#c8603a', '#2a1010'], deep: '#0e0b0a', leaf: ['#22302a', '#304438', '#46604c'], vine: ['#3a2a22', '#5a3a2a'], out: '#08060a', corrupt: '#1a0a0a' };
-SCALES.gruta = [123.5, 146.8, 164.8, 185, 220];
 EYE.gruta = '#ff9a3a';
 BIOME_BUILD.gruta = function () {
   const r = seeded(404);
@@ -626,7 +625,7 @@ function drawBoitata(B) {
   if (B.st === 'diveW') { ctx.globalAlpha = 0.5 + Math.sin(t * 25) * 0.4; for (let i = -12; i <= 12; i += 3) rect(ctx, B.x + i, GY - 1, 2, 1, '#ffd27a'); ctx.globalAlpha = 1; }
 }
 STORY.boitataFreed = async function (B) {
-  musicSet(null);
+  musicSet('victory');
   await wait(1.6);
   await talk([['', 'A última corrente se rompe. A serpente cai, exausta. Tudo fica em silêncio.']]);
   for (let i = 0; i <= 40; i++) { B.revive = i / 40; await wait(0.05); }

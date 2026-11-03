@@ -291,6 +291,10 @@ function humanPose(a, s) {
     P.bob = Math.abs(c1) > 0.7 ? 1 : 0; P.lean = run ? 1 : 0;
     P.af = [-s1 * 0.8 + 0.3, 0.9]; P.ab = [s1 * 0.9, 0.7];
     P.wa = wp === 'bow' ? HPI / 2 + 0.4 : wp === 'spear' ? HPI / 2 + 0.12 + s1 * 0.04 : 2.3 + s1 * 0.12;
+  } else if (k === 'dash') {
+    const drive = 1 - ez(p);
+    P.lean = 2 + drive * 2; P.head = 1; P.ff = [4, 1]; P.fb = [-6, 2];
+    P.af = [-0.8, 0.5]; P.ab = [-1.3, 0.3]; P.wa = 2.5;
   } else if (k === 'jump') { P.ff = [3, 4]; P.fb = [-2, 2]; P.af = [2.2, 0.4]; P.ab = [-1.1, 0.3]; P.wa = 2.4; }
   else if (k === 'fall') { P.ff = [2, 0]; P.fb = [-3, 1]; P.af = [1.8, 0.2]; P.ab = [-1.5, 0.2]; P.wa = 2.0; }
   else if (k === 'climb') { const s1 = Math.sin(t * 9) * (a.moving ? 1 : 0); P.af = [HPI - 0.2 + s1 * 0.3, 0.2]; P.ab = [HPI - 0.4 - s1 * 0.3, 0.2]; P.ff = [2, 3 + s1 * 2]; P.fb = [-1, 3 - s1 * 2]; P.noWeapon = true; P.lean = 1; }
@@ -343,11 +347,7 @@ function drawHuman(c, x, y, f, a, s, flash, alpha) {
   };
   const hair = s.hair, skin = s.skin, skinD = s.skinD, skinL = s.skinL || skin, esp = !!s.outline, deep = esp ? '#050307' : '#3e2214', mixC = (p, q) => '#' + [1, 3, 5].map(i => Math.round((parseInt(p.slice(i, i + 2), 16) + parseInt(q.slice(i, i + 2), 16)) / 2).toString(16).padStart(2, '0')).join(''), skinM = mixC(skin, skinD);
   let slash = null, shF = null, tip = 8;
-  if (a.kind === 'roll') {
-    const q = Math.floor((a.p || 0) * 10) % 4, pos = [[-5, -11], [0, -11], [0, -6], [-5, -6]][q];
-    A(-5, -11, 10, 10, skin); A(-5, -11, 10, 3, s.top ? s.top.col : skinD); A(pos[0], pos[1], 5, 5, hair);
-    if (s.bottom) A(-5, -4, 10, 2, s.bottom.col);
-  } else {
+  {
     const P = humanPose(a, s);
     if (P.lie) {
       // caído de costas no chão

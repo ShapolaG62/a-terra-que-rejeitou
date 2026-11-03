@@ -1,3 +1,7 @@
 node_modules/
 .claude/
 *.log
+
+# Originais de mídia já copiados para assets/.
+/Nova pasta/
+/Nova pasta (2)/

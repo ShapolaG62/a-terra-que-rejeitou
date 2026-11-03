@@ -2,7 +2,7 @@
 // Mundo: estado do jogo, formas do espírito, física, jogador, inimigos, projéteis, perigos e desenho.
 
 const G = {
-  state: 'title', save: newSave(), lvl: null, P: null, ents: [], projs: [], parts: [], hazards: [], boss: null,
+  state: 'intro', save: newSave(), lvl: null, P: null, ents: [], projs: [], parts: [], hazards: [], boss: null,
   cam: { x: 0, y: -DY, shake: 0 }, t: 0, rt: 0, freeze: false, lock: 0, auto: 0, hitstop: 0, heat: 0, heatMul: 1,
   dynShade: [], waits: [], interact: null, flash: 0, flashCol: '#fff', dark: 0, sceneDraw: null, rain: 0, flags: {}, speedMul: 1, camTarget: null, fx: [], bfx: [],
 };
@@ -12,12 +12,12 @@ const DIFF = { dmg: 1.73, enemyHp: 1.8, bossHp: 1.8, bossSpeed: 1.25 };
 
 // ---------- Formas (cada povo ensina um jeito de lutar) ----------
 const FORMS = {
-  espirito: { nome: 'Espírito sem forma', atk: { type: 'melee', dur: 0.34, act: [0.08, 0.18], range: 17, h: 22, dmg: 10, st: 10 }, shot: { dmg: 6, spd: 220, kind: 'orb' }, sp: null, roll: { dur: 0.34, spd: 170 } },
-  zarabatana: { nome: 'Caçador da zarabatana', povo: 'Amazônia', atk: { type: 'melee', dur: 0.3, act: [0.07, 0.16], range: 20, h: 22, dmg: 11, st: 9 }, shot: { dmg: 10, spd: 320, kind: 'dart', st: 7 }, sp: { type: 'burst', dur: 0.5, st: 45, cd: 1.2, dmg: 6 }, roll: { dur: 0.42, spd: 215 } },
-  arco: { nome: 'Arqueira do cerrado', povo: 'Cerrado', atk: { type: 'combo', st: 11, hits: [{ dur: 0.3, act: [0.07, 0.16], range: 22, h: 22, dmg: 12 }, { dur: 0.3, act: [0.07, 0.16], range: 22, h: 22, dmg: 12 }, { dur: 0.46, act: [0.14, 0.26], range: 26, h: 24, dmg: 20 }] }, shot: { dmg: 11, spd: 330, kind: 'arrow' }, sp: { type: 'firearrow', dur: 0.5, st: 45, cd: 1.3, dmg: 14 }, roll: { dur: 0.34, spd: 185 }, track: true },
-  lanca: { nome: 'Canoeiro das águas', povo: 'Pantanal', atk: { type: 'melee', dur: 0.42, act: [0.12, 0.24], range: 34, h: 14, dmg: 17, st: 13 }, shot: { dmg: 9, spd: 260, kind: 'javelin', grav: 60 }, sp: { type: 'throw', dur: 0.45, st: 45, cd: 1.2, dmg: 24 }, roll: { dur: 0.34, spd: 180 }, water: true },
-  cabaca: { nome: 'Lanceira da cabaça', povo: 'Caatinga', atk: { type: 'melee', dur: 0.38, act: [0.1, 0.22], range: 28, h: 20, dmg: 16, st: 12 }, shot: { dmg: 9, spd: 250, kind: 'drop', grav: 120 }, sp: { type: 'splash', dur: 0.5, st: 42, cd: 1.4, dmg: 16 }, roll: { dur: 0.34, spd: 180 }, heatRes: 0.7 },
-  semente: { nome: 'Anciã das sementes', povo: 'Mata Atlântica', atk: { type: 'melee', dur: 0.36, act: [0.1, 0.22], range: 24, h: 22, dmg: 17, st: 11 }, shot: { dmg: 10, spd: 280, kind: 'seed' }, sp: { type: 'roots', dur: 0.5, st: 48, cd: 1.4, dmg: 28 }, roll: { dur: 0.36, spd: 190 } },
+  espirito: { nome: 'Espírito sem forma', atk: { type: 'melee', dur: 0.34, act: [0.08, 0.18], range: 17, h: 22, dmg: 10, st: 10 }, shot: { dmg: 6, spd: 220, kind: 'orb' }, sp: null, dash: { dur: 0.34, spd: 170 } },
+  zarabatana: { nome: 'Caçador da zarabatana', povo: 'Amazônia', atk: { type: 'melee', dur: 0.3, act: [0.07, 0.16], range: 20, h: 22, dmg: 11, st: 9 }, shot: { dmg: 10, spd: 320, kind: 'dart', st: 7 }, sp: { type: 'burst', dur: 0.5, st: 45, cd: 1.2, dmg: 6 }, dash: { dur: 0.42, spd: 215 } },
+  arco: { nome: 'Arqueira do cerrado', povo: 'Cerrado', atk: { type: 'combo', st: 11, hits: [{ dur: 0.3, act: [0.07, 0.16], range: 22, h: 22, dmg: 12 }, { dur: 0.3, act: [0.07, 0.16], range: 22, h: 22, dmg: 12 }, { dur: 0.46, act: [0.14, 0.26], range: 26, h: 24, dmg: 20 }] }, shot: { dmg: 11, spd: 330, kind: 'arrow' }, sp: { type: 'firearrow', dur: 0.5, st: 45, cd: 1.3, dmg: 14 }, dash: { dur: 0.34, spd: 185 }, track: true },
+  lanca: { nome: 'Canoeiro das águas', povo: 'Pantanal', atk: { type: 'melee', dur: 0.42, act: [0.12, 0.24], range: 34, h: 14, dmg: 17, st: 13 }, shot: { dmg: 9, spd: 260, kind: 'javelin', grav: 60 }, sp: { type: 'throw', dur: 0.45, st: 45, cd: 1.2, dmg: 24 }, dash: { dur: 0.34, spd: 180 }, water: true },
+  cabaca: { nome: 'Lanceira da cabaça', povo: 'Caatinga', atk: { type: 'melee', dur: 0.38, act: [0.1, 0.22], range: 28, h: 20, dmg: 16, st: 12 }, shot: { dmg: 9, spd: 250, kind: 'drop', grav: 120 }, sp: { type: 'splash', dur: 0.5, st: 42, cd: 1.4, dmg: 16 }, dash: { dur: 0.34, spd: 180 }, heatRes: 0.7 },
+  semente: { nome: 'Anciã das sementes', povo: 'Mata Atlântica', atk: { type: 'melee', dur: 0.36, act: [0.1, 0.22], range: 24, h: 22, dmg: 17, st: 11 }, shot: { dmg: 10, spd: 280, kind: 'seed' }, sp: { type: 'roots', dur: 0.5, st: 48, cd: 1.4, dmg: 28 }, dash: { dur: 0.36, spd: 190 } },
 };
 const FORM_ORDER = ['zarabatana', 'arco', 'lanca', 'cabaca', 'semente'];
 
@@ -133,7 +133,7 @@ function updatePlayer(dt) {
   if (P.stun > 0) { P.stun -= dt; mx = 0; }
   P.inv -= dt; P.stDelay -= dt; P.spCd -= dt; P.jbuf -= dt; P.drop -= dt; P.slow -= dt;
   const hot = G.heat >= 100;
-  if (P.stDelay <= 0 && P.state !== 'roll' && P.state !== 'attack') P.st = Math.min(P.stMax(), P.st + (hot ? 22 : 48) * dt);
+  if (P.stDelay <= 0 && P.state !== 'dash' && P.state !== 'attack') P.st = Math.min(P.stMax(), P.st + (hot ? 22 : 48) * dt);
   const water = P.inWater && !F.water, wform = P.inWater && F.water;
   let spd = 88 * (1 + itemBonus('speed')) * (water ? 0.55 : wform ? 1.12 : 1) * (P.slow > 0 ? 0.55 : 1) * (G.speedMul || 1) * (G.lvl.cave && I.down.down && P.onG ? 0.45 : 1);
   const press = a => ctl && P.stun <= 0 && I.pressed[a];
@@ -151,7 +151,7 @@ function updatePlayer(dt) {
     if (press('attack') && P.ab.attack && P.st > 0) startAttack();
     else if (press('shoot') && P.ab.attack && P.st > 0) startShot();
     else if (press('special') && P.ab.special && F.sp && P.spCd <= 0 && P.st > 4) startSpecial();
-    else if (press('dodge') && P.ab.dodge && P.st > 0 && (P.onG || P.airDash)) startRoll();
+    else if (press('dodge') && P.ab.dodge && P.st > 0 && (P.onG || P.airDash)) startDash();
     else if (press('heal') && P.ab.heal && P.onG) { if (P.flasks > 0) { P.state = 'heal'; P.stT = 0; P.healed = false; } else floatText(P.x + 5, P.y - 4, 'cabaça vazia'); }
     else if (press('swap') && G.save.forms.length > 2 && G.lvl.biome === 'mata' && !G.flags.final) swapForm();
   } else if (P.state === 'attack' || P.state === 'special') {
@@ -165,11 +165,11 @@ function updatePlayer(dt) {
       else P.combo = 0;
       P.queued = false;
     }
-  } else if (P.state === 'roll') {
-    P.stT += dt; const R = F.roll;
-    P.vx = P.f * R.spd * (1 - P.stT / R.dur * 0.4) * (water ? 0.6 : 1);
+  } else if (P.state === 'dash') {
+    P.stT += dt; const D = F.dash;
+    P.vx = P.f * D.spd * (1 - P.stT / D.dur * 0.4) * (water ? 0.6 : 1);
     if (!P.onG) P.vy = Math.min(P.vy, 30);
-    if (P.stT >= R.dur) { P.state = 'normal'; P.y -= 10; P.h = 22; if (solidAt(P.x + 5, P.y + 1)) { P.y += 10; P.h = 12; P.state = 'roll'; P.stT = R.dur * 0.7; } }
+    if (P.stT >= D.dur) P.state = 'normal';
   } else if (P.state === 'heal') {
     P.stT += dt; P.vx = 0;
     if (!P.healed && P.stT > 0.45) { P.healed = true; P.flasks--; P.hp = Math.min(P.hpMax(), P.hp + 45 + G.save.vig * 4 + itemBonus('heal')); SFX.heal(); for (let i = 0; i < 10; i++) part(P.x + 5 + rnd(-6, 6), P.y + rnd(0, 20), rnd(-10, 10), rnd(-40, -10), 0.8, '#f2c14e'); }
@@ -202,13 +202,13 @@ function updatePlayer(dt) {
   for (const th of G.lvl.thorns) if (P.state !== 'dead' && overlap(P, { x: th.x0 + 2, y: th.y - 10, w: th.x1 - th.x0 - 4, h: 10 })) hurtPlayer(THORN_DMG, (th.x0 + th.x1) / 2, { fixed: true });
   for (const d of G.lvl.dthorns) if (P.state !== 'dead' && overlap(P, { x: d.x - 7, y: GY - 16, w: 14, h: 16 })) hurtPlayer(THORN_DMG, d.x, { fixed: true });
   if (P.onG) { P.coy = 0.1; P.airDash = true; P.jumping = false; if (!wasG && P.vy >= 0) { SFX.land(); } } else P.coy -= dt;
-  if (P.onG && P.plat && P.plat.t === 'g' && !P.plat.wall && P.state !== 'roll' && P.x >= P.plat.x + 6 && P.x + P.w <= P.plat.x + P.plat.w - 6) P.safe = { x: P.x, y: P.y };
+  if (P.onG && P.plat && P.plat.t === 'g' && !P.plat.wall && P.state !== 'dash' && P.x >= P.plat.x + 6 && P.x + P.w <= P.plat.x + P.plat.w - 6) P.safe = { x: P.x, y: P.y };
   // água
   const wasW = P.inWater; P.inWater = false;
   for (const w of G.lvl.water) if (P.x + 5 > w.x && P.x + 5 < w.x + w.w && P.y + P.h > w.y + 3) P.inWater = true;
   if (P.inWater !== wasW && Math.abs(P.vy) > 40) splash(P.x + 5, (G.lvl.water[0] || {}).y || P.y + P.h);
   // queda em abismo
-  if (P.y > (G.lvl.h || H) + 40 && P.state !== 'dead') { P.x = P.safe.x; P.y = P.safe.y; P.vx = P.vy = 0; P.jbuf = 0; hurtPlayer(15, null, { pit: true }); }
+  if (P.y > (G.lvl.h || WORLD_H) + 40 && P.state !== 'dead') { P.x = P.safe.x; P.y = P.safe.y; P.vx = P.vy = 0; P.jbuf = 0; hurtPlayer(15, null, { pit: true }); }
   // passos e animação
   P.ph += Math.abs(P.vx) * dt * 0.22;
   if (P.onG && Math.abs(P.vx) > 30 && Math.sin(P.ph) * Math.sin(P.ph - Math.abs(P.vx) * dt * 0.22) < 0) SFX.step();
@@ -363,10 +363,13 @@ function specialTick() {
     }
   }
 }
-function startRoll() {
-  const P = G.P;
+function startDash() {
+  const P = G.P, F = FORMS[P.form] || FORMS.espirito;
   if (!P.onG) P.airDash = false;
-  P.state = 'roll'; P.stT = 0; useSt(18); P.inv = Math.max(P.inv, (FORMS[P.form] || FORMS.espirito).roll.dur * (0.85 + itemBonus('roll'))); P.y += 10; P.h = 12; SFX.roll();
+  P.state = 'dash'; P.stT = 0; useSt(18);
+  // Mesma janela da cambalhota, incluindo o bônus original da Pena de gavião.
+  P.inv = Math.max(P.inv, F.dash.dur * (0.85 + itemBonus('roll')));
+  P.vx = P.f * F.dash.spd * (P.inWater && !F.water ? 0.6 : 1); SFX.dash();
 }
 function swapForm() {
   const P = G.P, list = G.save.forms.filter(f => f !== 'espirito');
@@ -382,7 +385,7 @@ function hurtPlayer(dmg, srcX, o = {}) {
   if (!o.pit && (P.inv > 0 || G.lock > 0 && !o.force)) return false;
   if (!o.pit && !o.fixed) dmg = Math.round(dmg * DIFF.dmg);
   P.hp -= dmg; P.inv = 0.85; SFX.hurt(); G.cam.shake = Math.max(G.cam.shake, 4); G.flash = 0.08; G.flashCol = '#c8402e';
-  if (!o.pit) { const dir = srcX == null ? -P.f : (P.x + 5 < srcX ? -1 : 1); P.vx = dir * 120; P.vy = -130; if (P.state === 'roll') { P.y -= 10; P.h = 22; } P.state = 'hurt'; P.stT = 0; }
+  if (!o.pit) { const dir = srcX == null ? -P.f : (P.x + 5 < srcX ? -1 : 1); P.vx = dir * 120; P.vy = -130; P.state = 'hurt'; P.stT = 0; }
   for (let i = 0; i < 8; i++) part(P.x + 5, P.y + 10, rnd(-60, 60), rnd(-80, -10), 0.4, '#c8402e');
   if (P.hp <= 0) die();
   return true;
@@ -442,7 +445,7 @@ function updateEnemies(dt) {
       e.stag -= dt; e.vx *= Math.pow(0.02, dt);
       if (ET[e.type].fly) { e.x += e.vx * dt; e.y += e.vy * dt; e.vy *= Math.pow(0.05, dt); }
       else { e.vy += GRAV * dt; moveBody(e, dt); }
-      if (e.y > (G.lvl.h || H) + 60) e.hp = 0;
+      if (e.y > (G.lvl.h || WORLD_H) + 60) e.hp = 0;
       continue;
     }
     if (e.ai === 'crawler') {
@@ -500,7 +503,7 @@ function updateEnemies(dt) {
     } else if (e.ai === 'wolf') updateWolf(e, dt, dx, dy);
     else if (CAVE_AI[e.ai]) CAVE_AI[e.ai](e, dt, dx, dy);
     if (overlap(e, P) && !e.noTouch && e.ai !== 'brute' && e.ai !== 'lanceiro' && !(e.ai === 'wolf' && e.st === 'rest')) hurtPlayer(e.dmg, e.x + e.w / 2);
-    if (e.y > (G.lvl.h || H) + 60) e.hp = 0;
+    if (e.y > (G.lvl.h || WORLD_H) + 60) e.hp = 0;
   }
   G.ents = G.ents.filter(e => e.hp > 0 || e.keep);
 }
@@ -569,7 +572,7 @@ function updateProjs(dt) {
       if (hurtPlayer(p.dmg, p.x)) { if (p.onHit) p.onHit(p); p.life = 0; }
     }
   }
-  G.projs = G.projs.filter(p => p.life > 0 && p.x > G.cam.x - 80 && p.x < G.cam.x + W + 80 && p.y < (G.lvl.h || H) + 40 && p.y > G.cam.y - 120);
+  G.projs = G.projs.filter(p => p.life > 0 && p.x > G.cam.x - 80 && p.x < G.cam.x + W + 80 && p.y < (G.lvl.h || WORLD_H) + 40 && p.y > G.cam.y - 120);
 }
 
 // ---------- Perigos (gás, fogo, ondas de choque, raízes...) ----------
@@ -819,11 +822,11 @@ function drawProj(p) {
   else rect(ctx, p.x - p.w / 2, p.y - p.h / 2, p.w, p.h, '#fff');
 }
 function drawPlayer(P, t) {
-  if (P.inv > 0 && P.state !== 'roll' && Math.floor(t * 20) % 2 === 0 && P.state !== 'dead') return;
+  if (P.inv > 0 && P.state !== 'dash' && Math.floor(t * 20) % 2 === 0 && P.state !== 'dead') return;
   const s = P.state, F = FORMS[P.form] || FORMS.espirito;
   let a;
   const wpn = (SPEC[P.form] || {}).weapon;
-  if (s === 'roll') a = { kind: 'roll', p: P.stT / F.roll.dur };
+  if (s === 'dash') a = { kind: 'dash', p: P.stT / F.dash.dur };
   else if (s === 'attack' && P.def.type === 'shot') a = { kind: 'shot', p: P.stT / P.def.dur, shot: P.def.kind, at: P.def.at / P.def.dur };
   else if (s === 'attack') a = { kind: 'attack', p: P.stT / P.def.dur, style: wpn === 'bow' ? ['over', 'sweep', 'thrust'][P.combo] : wpn === 'spear' ? 'thrust' : wpn === 'staff' || wpn === 'paddle' ? 'over' : wpn === 'blowgun' ? 'jab' : 'claw' };
   else if (s === 'special') a = { kind: 'special', p: P.stT / P.def.dur, shot: P.def.type, at: { burst: 0.16, firearrow: 0.56, throw: 0.44, splash: 0.44, roots: 0.5 }[P.def.type] };
@@ -836,6 +839,9 @@ function drawPlayer(P, t) {
   else a = { kind: P.kneel ? 'kneel' : 'idle', t };
   const spec = playerSpec(P.form);
   const alpha = P.fadeA != null ? P.fadeA : undefined;
+  if (s === 'dash') {
+    for (let i = 3; i > 0; i--) drawHuman(ctx, P.x + 5 - P.f * i * 7, P.y + P.h, P.f, a, spec, false, (alpha == null ? 1 : alpha) * (0.24 - i * 0.05));
+  }
   if (P.form === 'espirito' && !G.flags.noGlow) { ctx.globalAlpha = 0.15 + Math.sin(t * 3) * 0.05; ell(ctx, P.x + 5, P.y + P.h - 11, 10, 13, '#8a7ab0'); ctx.globalAlpha = 1; }
   drawHuman(ctx, P.x + 5, P.y + P.h, P.f, a, spec, P.state === 'hurt' && P.stT < 0.08, alpha);
   if (P.stun > 0) for (let i = 0; i < 3; i++) rect(ctx, P.x + 5 + Math.cos(t * 8 + i * 2) * 6, P.y - 4 + Math.sin(t * 8 + i * 2) * 2, 1, 1, '#c8f060');

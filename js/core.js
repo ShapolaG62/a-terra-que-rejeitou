@@ -1,7 +1,8 @@
 'use strict';
 // Núcleo: tela, layout, entrada (teclado, toque, controle), áudio e save.
-const W = 384, H = 216, GY = 150; // GY = altura padrão do chão (área visível 20% maior que 320×180)
+const W = 432, H = 243, GY = 150; // Campo de visão 12,5% maior, mantendo a proporção 16:9.
 const DY = H - 180, AW = W;            // DY: céu a mais em cima; AW: largura das arenas dos guardiões (a tela inteira)
+const WORLD_H = 216;                  // Limite de queda independente do tamanho da câmera.
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 ctx.imageSmoothingEnabled = false;
@@ -16,7 +17,7 @@ const overlap = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h 
 function hash(n) { n = Math.imul(n | 0, 374761393); n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967295; }
 function seeded(seed) { let s = (seed >>> 0) || 1; return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; }; }
 
-// ---------- Layout: palco 320x180 escalado; no retrato fica no alto com os controles embaixo ----------
+// ---------- Layout: palco 432x243 escalado; no retrato fica no alto com os controles embaixo ----------
 const stage = $('#stage');
 const L = { s: 1, x: 0, y: 0, w: W, h: H, portrait: false, touch: false };
 function layout() {
@@ -118,18 +119,29 @@ function setupTouch() {
   }
 }
 
-// ---------- Áudio (sintetizado, sem arquivos) ----------
-const AU = { ctx: null, master: null, music: null, on: true, biome: null, nextNote: 0, drone: null };
+// ---------- Áudio: efeitos sintetizados e trilhas em MP3 ----------
+const AU = { ctx: null, master: null, music: document.getElementById('music'), on: true, biome: null, track: null, musicAttempt: 0, musicPending: false, musicBlocked: false };
 function audioInit() {
+  AU.musicBlocked = false; musicTick();
   if (AU.ctx) { if (AU.ctx.state === 'suspended') AU.ctx.resume(); return; }
   try {
     AU.ctx = new (window.AudioContext || window.webkitAudioContext)();
     AU.master = AU.ctx.createGain(); AU.master.gain.value = AU.on ? 0.55 : 0; AU.master.connect(AU.ctx.destination);
-    AU.music = AU.ctx.createGain(); AU.music.gain.value = 0.32; AU.music.connect(AU.master);
   } catch (e) { AU.ctx = null; }
 }
-function setSound(on) { AU.on = on; if (AU.master) AU.master.gain.value = on ? 0.55 : 0; try { localStorage.setItem('terra-som', on ? '1' : '0'); } catch (e) {} }
+function setSound(on) {
+  AU.on = on;
+  if (AU.master) AU.master.gain.value = on ? 0.55 : 0;
+  AU.music.muted = !on;
+  const video = document.getElementById('introVideo');
+  if (video) video.muted = !on;
+  if (!on) { AU.musicAttempt++; AU.musicPending = false; AU.music.pause(); }
+  else { AU.musicBlocked = false; musicTick(); }
+  try { localStorage.setItem('terra-som', on ? '1' : '0'); } catch (e) {}
+}
 try { AU.on = localStorage.getItem('terra-som') !== '0'; } catch (e) {}
+AU.music.muted = !AU.on;
+AU.music.volume = 0.35;
 function tone(freq, dur, type = 'square', vol = 0.12, slide = 0, delay = 0, dest) {
   if (!AU.ctx) return;
   const t = AU.ctx.currentTime + delay;
@@ -156,7 +168,7 @@ const SFX = {
   dart: () => { tone(900, 0.07, 'triangle', 0.08, -500); noise(0.05, 0.06, 4000); },
   hit: () => { noise(0.1, 0.25, 1400); tone(140, 0.08, 'square', 0.06, -60); },
   hurt: () => { tone(180, 0.2, 'sawtooth', 0.12, -120); noise(0.15, 0.2, 800); },
-  roll: () => noise(0.18, 0.1, 700),
+  dash: () => noise(0.18, 0.1, 700),
   heal: () => { tone(523, 0.18, 'triangle', 0.08); tone(784, 0.3, 'triangle', 0.07, 0, 0.12); },
   mem: () => tone(1046, 0.08, 'triangle', 0.04, 300),
   fire: () => { noise(0.4, 0.14, 900); tone(110, 0.3, 'sawtooth', 0.04, 60); },
@@ -169,25 +181,35 @@ const SFX = {
   step: () => noise(0.03, 0.03, 600),
   lose: () => { tone(330, 0.6, 'triangle', 0.08, -150); tone(220, 0.9, 'triangle', 0.07, -100, 0.3); },
 };
-// Música ambiente: drone + notas pentatônicas esparsas, uma escala por bioma
-const SCALES = {
-  prologo: [146.8, 174.6, 196, 220, 261.6], amazonia: [196, 220, 261.6, 293.7, 329.6, 392],
-  cerrado: [174.6, 207.7, 233.1, 261.6, 311.1, 349.2], pantanal: [220, 246.9, 293.7, 329.6, 370, 440],
-  caatinga: [164.8, 196, 220, 246.9, 293.7, 329.6], mata: [146.8, 174.6, 220, 261.6, 293.7, 349.2],
-  coracao: [130.8, 155.6, 196, 233.1, 261.6], boss: [110, 130.8, 146.8, 164.8, 196],
+// Uma única faixa por vez; mudar de bioma mantém o tema na mesma posição.
+const MUSIC_TRACKS = {
+  menu: 'assets/audio/menu.mp3',
+  theme: 'assets/audio/tema.mp3',
+  boss: 'assets/audio/batalha-boss.mp3',
+  victory: 'assets/audio/vitoria-boss.mp3',
 };
-function musicSet(biome) { AU.biome = biome; }
+function musicSet(biome) {
+  const track = biome ? (Object.hasOwn(MUSIC_TRACKS, biome) ? biome : 'theme') : null;
+  AU.biome = biome;
+  if (track !== AU.track) {
+    AU.musicAttempt++; AU.musicPending = false; AU.musicBlocked = false;
+    AU.music.pause(); AU.track = track;
+    if (track) { AU.music.src = MUSIC_TRACKS[track]; AU.music.loop = true; }
+    else AU.music.removeAttribute('src');
+    AU.music.load();
+  }
+  musicTick();
+}
 function musicTick() {
-  if (!AU.ctx || !AU.biome || !AU.on) return;
-  const now = AU.ctx.currentTime;
-  if (now < AU.nextNote) return;
-  const sc = SCALES[AU.biome] || SCALES.prologo;
-  const boss = AU.biome === 'boss';
-  const f = pick(sc) * (Math.random() < 0.3 ? 2 : 1);
-  tone(f, boss ? 0.5 : 1.6, boss ? 'sawtooth' : 'triangle', boss ? 0.05 : 0.07, 0, 0, AU.music);
-  if (Math.random() < 0.35) tone(sc[0] / 2, boss ? 0.4 : 2.4, 'sine', 0.1, 0, 0, AU.music);
-  if (boss && Math.random() < 0.5) noise(0.08, 0.07, 300);
-  AU.nextNote = now + (boss ? rnd(0.25, 0.5) : rnd(0.7, 1.8));
+  if (!AU.on || !AU.track || AU.musicBlocked || AU.musicPending || !AU.music.paused) return;
+  const attempt = ++AU.musicAttempt;
+  AU.musicPending = true;
+  AU.music.play().then(() => {
+    if (attempt === AU.musicAttempt) AU.musicPending = false;
+  }).catch(() => {
+    if (attempt !== AU.musicAttempt) return;
+    AU.musicPending = false; AU.musicBlocked = true;
+  });
 }
 
 // ---------- Save ----------
