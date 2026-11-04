@@ -219,7 +219,7 @@ async function fireMenu() {
         const b = await menu(statsHTML(true));
         if (b === 'back') break;
         const lv = G.save.vig + G.save.forc + G.save.fol, cost = 30 + lv * 15;
-        if (G.save.mem >= cost) { G.save.mem -= cost; G.save[b]++; SFX.rest(); G.P.hp = statMax().hp; G.P.st = statMax().st; writeSave(); }
+        if (G.save.mem >= cost) { G.save.mem -= cost; G.save[b]++; SFX.rest(); VFX.heal(G.P); G.P.hp = statMax().hp; G.P.st = statMax().st; writeSave(); }
       }
     } else if (a === 'j') await menu(journalHTML());
     else if (a === 'inv') await menu(inventoryHTML());
@@ -512,7 +512,7 @@ async function nextAct() {
 }
 function grantForm(f) {
   if (!G.save.forms.includes(f)) G.save.forms.push(f);
-  setForm(f); writeSave();
+  setForm(f); writeSave(); VFX.form(G.P);
   const P = G.P; for (let i = 0; i < 30; i++) part(P.x + 5 + rnd(-10, 10), P.y + rnd(-4, 24), rnd(-30, 30), rnd(-60, 0), 1, pick(['#f2c14e', '#efe0c0', '#e0703a']));
   SFX.echo(); G.flash = 0.25; G.flashCol = '#f4ecd8';
   showToast('Nova forma', FORMS[f].nome, 2.6);
@@ -556,14 +556,14 @@ async function remember(id) {
   SFX.echo(); G.flash = 0.35; G.flashCol = '#000';
   const isNew = !G.save.echoes.includes(id);
   await say('', ECHOES[id].x);
-  if (isNew) { G.save.echoes.push(id); writeSave(); showToast('Eco do Corpo-seco', ECHOES[id].t + ' · ' + G.save.echoes.length + '/6', 2.6); }
+  if (isNew) { G.save.echoes.push(id); writeSave(); VFX.memory(G.P.x + 5, G.P.y + G.P.h, 32); showToast('Eco do Corpo-seco', ECHOES[id].t + ' · ' + G.save.echoes.length + '/6', 2.6); }
 }
 function openChest(c) {
   // loot sorteado: um item que você ainda não tem (runa, ferramenta ou parte) e um punhado de memórias
   const owned = G.save.items || [], pool = Object.keys(RELICS).filter(id => !PARTS[id] && !RELICS[id].fixed && !owned.includes(id));
   const item = c.item && !owned.includes(c.item) ? c.item : pool.length && Math.random() < 0.85 ? pick(pool) : null, act = G.lvl.act || 0;
   const R2 = { item, mem: Math.round((rnd(20, 50) + act * 15) * (item ? 1 : 2)) };
-  G.save.opened[c.id] = 1; c.openT = G.t;
+  G.save.opened[c.id] = 1; c.openT = G.t; VFX.chest(c);
   const parts = [];
   if (R2.item) { const r = giveRelic(R2.item); if (r) parts.push(r.n + ' (' + r.d + ')'); }
   if (R2.mem) { G.save.mem += R2.mem; parts.push(R2.mem + ' memórias'); }
@@ -576,10 +576,10 @@ function openChest(c) {
 function restAt(f) {
   scene(async () => {
     const P = G.P, m = statMax(), gy = groundY(f.x);
-    if (!G.save.lit[f.id]) { G.save.lit[f.id] = 1; SFX.fire(); for (let i = 0; i < 24; i++) part(f.x + rnd(-6, 6), gy - 4, rnd(-20, 20), rnd(-60, -20), 1, pick(['#ffd27a', '#e0703a', '#c8402e'])); }
+    if (!G.save.lit[f.id]) { G.save.lit[f.id] = 1; SFX.fire(); VFX.play('terra/acende', f.x, gy); for (let i = 0; i < 24; i++) part(f.x + rnd(-6, 6), gy - 4, rnd(-20, 20), rnd(-60, -20), 1, pick(['#ffd27a', '#e0703a', '#c8402e'])); }
     P.hp = m.hp; P.st = m.st; P.flasks = m.flasks; G.heat = 0; P.vx = 0; P.breath = 100;
     G.save.fire = { lvl: G.lvl.id, x: f.x }; writeSave();
-    spawnEnemies(); G.grace = 1; P.inv = 1; SFX.rest();
+    spawnEnemies(); G.grace = 1; P.inv = 1; SFX.rest(); VFX.rest(f.x, gy);
     for (let i = 0; i < 20; i++) part(f.x + rnd(-6, 6), gy - 6, rnd(-15, 15), rnd(-50, -10), 1.2, pick(['#ffd27a', '#e0703a']));
     await fireMenu();
   });
@@ -612,12 +612,12 @@ function resetArena() {
   G.boss = null; G.dynShade = []; G.heatMul = 1; G.dark = 0; hud.boss.hidden = true; hud.cache = {};
   musicSet(L2.biome);
 }
-function onBossDown(B) { hud.boss.hidden = true; scene(() => STORY.bossDown(B)); }
+function onBossDown(B) { hud.boss.hidden = true; VFX.bossDown(B); scene(() => STORY.bossDown(B)); }
 
 // ---------- Morte e retorno ----------
 function die() {
   const P = G.P; if (P.state === 'dead') return;
-  P.state = 'dead'; P.hp = 0; G.lock++; SFX.lose();
+  P.state = 'dead'; P.hp = 0; G.lock++; SFX.lose(); VFX.death(P);
   if (G.save.mem > 0) { const fell = P.y > GY + 20; G.save.drop = { lvl: G.lvl.id, x: (fell ? P.safe.x : P.x) + 5, y: (fell ? P.safe.y : P.y) + 12, mem: G.save.mem }; }
   G.save.mem = 0; writeSave();
   closeDialog();
@@ -638,7 +638,7 @@ function respawn() {
   G.P = makePlayer(x, groundY(x)); G.P.form = form; if (G.flags.final) G.P.ab = ab;
   for (const t of L2.triggers) if (t.retry && !t.completed) t.done = false;
   spawnEnemies(); G.projs = []; G.hazards = []; G.heat = 0; G.camTarget = null; G.auto = 0;
-  G.grace = 1; G.P.inv = 1;
+  G.grace = 1; G.P.inv = 1; VFX.respawn(G.P);
   G.cam.x = clamp(x - W / 2, 0, L2.w - W); updateHudForm();
 }
 
@@ -1210,8 +1210,9 @@ function frame(ts) {
   else if (G.state === 'play') {
     if (I.pressed.pause && !G.lock) pauseMenu();
     else if (I.pressed.inv && !G.lock) openInventory();
-    else update(dt);
+    else if (!(G.hitstop > 0)) update(dt);
   } else if (G.state === 'scene') { G.t += dt; }
+  if (G.hitstop > 0) G.hitstop -= dt; else if (!UI.menu && !G.paused) VFX.update(dt);
   if (G.state === 'play' || G.state === 'scene') {
     if (G.state === 'play' && UI.dialog) { G.t += dt * 0.15; updateParts(dt * 0.3); }
   }

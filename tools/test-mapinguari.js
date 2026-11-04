@@ -23,7 +23,7 @@ function game() {
   };
   const sandbox = vm.createContext({
     ctx, I: { down: {}, pressed: {} },
-    SFX: new Proxy({}, { get: () => () => {} }),
+    VFX: new Proxy({}, { get: () => () => {} }), SFX: new Proxy({}, { get: () => () => {} }),
     setTimeout() { throw new Error('Ataques do Mapinguari devem usar o tempo do jogo.'); },
     onBossDown() {},
   });

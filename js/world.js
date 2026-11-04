@@ -110,7 +110,7 @@ function loadLevel(id) {
   // tufos de grama decorativos
   const r = seeded(id.length * 97 + 3);
   for (const s of L.solids) if (s.t === 'g' && !s.wall && !s.block) for (let x = s.x + 2; x < s.x + s.w - 2; x += 3 + r() * 9 | 0) L.decor.push({ x, y: s.y, h: 1 + r() * 4 | 0, c: r() });
-  G.lvl = L; G.fx = []; G.bfx = []; G.projs = []; G.parts = []; G.hazards = []; G.boss = null; G.dynShade = []; G.heat = 0; G.heatMul = 1; G.dark = 0;
+  VFX.setLevel(L); G.lvl = L; G.fx = []; G.bfx = []; G.projs = []; G.parts = []; G.hazards = []; G.boss = null; G.dynShade = []; G.heat = 0; G.heatMul = 1; G.dark = 0;
   for (const n of L.npcs) n.t = rnd(0, 5);
   spawnEnemies();
   musicSet(L.biome === 'mata' ? 'mata' : L.biome);
@@ -147,7 +147,7 @@ function updatePlayer(dt) {
     if (press('jump')) P.jbuf = 0.13;
     if (P.jbuf > 0 && (P.onG || P.coy > 0) && P.ab.jump) {
       if (I.down.down && P.plat && P.plat.t === 'p') { P.drop = 0.25; P.jbuf = 0; }
-      else { P.vy = -JUMP * (water ? 0.8 : wform ? 1.15 : 1); P.jbuf = 0; P.coy = 0; P.jumping = true; SFX.jump(); if (P.inWater) splash(P.x + 5, P.y + P.h); }
+      else { P.vy = -JUMP * (water ? 0.8 : wform ? 1.15 : 1); P.jbuf = 0; P.coy = 0; P.jumping = true; SFX.jump(); if (!P.inWater) VFX.dust(P.x + 5, P.y + P.h, 0, 0.7); if (P.inWater) splash(P.x + 5, P.y + P.h); }
     }
     if (P.jumping && !I.down.jump && P.vy < -110) { P.vy = -110; P.jumping = false; }
     if (press('attack') && P.ab.attack && P.st > 0) startAttack();
@@ -174,7 +174,7 @@ function updatePlayer(dt) {
     if (P.stT >= D.dur) P.state = 'normal';
   } else if (P.state === 'heal') {
     P.stT += dt; P.vx = 0;
-    if (!P.healed && P.stT > 0.45) { P.healed = true; P.flasks--; P.hp = Math.min(P.hpMax(), P.hp + 45 + G.save.vig * 4 + itemBonus('heal')); SFX.heal(); for (let i = 0; i < 10; i++) part(P.x + 5 + rnd(-6, 6), P.y + rnd(0, 20), rnd(-10, 10), rnd(-40, -10), 0.8, '#f2c14e'); }
+    if (!P.healed && P.stT > 0.45) { P.healed = true; P.flasks--; P.hp = Math.min(P.hpMax(), P.hp + 45 + G.save.vig * 4 + itemBonus('heal')); SFX.heal(); VFX.heal(P); for (let i = 0; i < 10; i++) part(P.x + 5 + rnd(-6, 6), P.y + rnd(0, 20), rnd(-10, 10), rnd(-40, -10), 0.8, '#f2c14e'); }
     if (P.stT >= 0.7) P.state = 'normal';
   } else if (P.state === 'hurt') {
     P.stT += dt; P.vx = lerp(P.vx, 0, 0.1);
@@ -203,7 +203,7 @@ function updatePlayer(dt) {
   // espinhos: dano fixo, empurrão para trás e para cima (inimigos não sofrem)
   for (const th of G.lvl.thorns) if (P.state !== 'dead' && overlap(P, { x: th.x0 + 2, y: th.y - 10, w: th.x1 - th.x0 - 4, h: 10 })) hurtPlayer(THORN_DMG, (th.x0 + th.x1) / 2, { fixed: true });
   for (const d of G.lvl.dthorns) if (P.state !== 'dead' && overlap(P, { x: d.x - 7, y: GY - 16, w: 14, h: 16 })) hurtPlayer(THORN_DMG, d.x, { fixed: true });
-  if (P.onG) { P.coy = 0.1; P.airDash = true; P.jumping = false; if (!wasG && P.vy >= 0) { SFX.land(); } } else P.coy -= dt;
+  if (P.onG) { P.coy = 0.1; P.airDash = true; P.jumping = false; if (!wasG && P.vy >= 0) { SFX.land(); if (!P.inWater) VFX.dust(P.x + 5, P.y + P.h, 0, 1); } } else P.coy -= dt;
   if (P.onG && P.plat && P.plat.t === 'g' && !P.plat.wall && P.state !== 'dash' && P.x >= P.plat.x + 6 && P.x + P.w <= P.plat.x + P.plat.w - 6) P.safe = { x: P.x, y: P.y };
   // água
   const wasW = P.inWater; P.inWater = false;
@@ -232,7 +232,7 @@ function updatePlayer(dt) {
   } else { P.breath = Math.min(100, (P.breath == null ? 100 : P.breath) + 70 * dt); P.drown = 0; }
   // memórias deixadas na morte
   const d = G.save.drop;
-  if (d && d.lvl === G.lvl.id && Math.abs(P.x + 5 - d.x) < 10 && Math.abs(P.y + 11 - d.y) < 22) { G.save.mem += d.mem; floatText(d.x, d.y - 10, '+' + d.mem + ' memórias'); SFX.echo(); G.save.drop = null; writeSave(); }
+  if (d && d.lvl === G.lvl.id && Math.abs(P.x + 5 - d.x) < 10 && Math.abs(P.y + 11 - d.y) < 22) { G.save.mem += d.mem; floatText(d.x, d.y - 10, '+' + d.mem + ' memórias'); SFX.echo(); VFX.memory(d.x, d.y + 10, 28); G.save.drop = null; writeSave(); }
 }
 function inShade(x) {
   for (const s of G.lvl.shade) if (x > s.x && x < s.x + s.w) return true;
@@ -280,7 +280,7 @@ function startAttack(cont) {
   faceMouse();
   P.def = A.type === 'combo' ? Object.assign({ type: 'melee' }, A.hits[P.combo]) : A;
   P.state = 'attack'; P.stT = 0; P.hitSet = new Set(); P.shot = false;
-  useSt(A.st * PERTO.st); SFX.swing(P.form);
+  useSt(A.st * PERTO.st); SFX.swing(P.form); VFX.slash(P);
   if (P.onG) P.vx = P.f * 30;
   emitNoise(P.x + 5, P.y + 11, 70);
 }
@@ -350,7 +350,7 @@ function specialTick() {
     if (!P.shots && P.stT >= 0.2) { P.shots = 1; SFX.swing(); shoot({ x: ox, y: oy, vx: P.f * 330, vy: -10, w: 18, h: 2, dmg: D.dmg * m, kind: 'spear', pierce: true, grav: 40 }); }
   } else if (D.type === 'splash') {
     if (!P.shots && P.stT >= 0.22) {
-      P.shots = 1; SFX.splash(); G.heat = Math.max(0, G.heat - 45);
+      P.shots = 1; SFX.splash(); G.heat = Math.max(0, G.heat - 45); VFX.splash(cx + P.f * 18, P.y + P.h);
       const hb = { x: cx + (P.f > 0 ? -6 : -40), y: P.y - 8, w: 46, h: 34 };
       meleeHit(hb, D.dmg * m, P.hitSet, { cool: true, melee: true });
       for (let i = 0; i < 24; i++) part(cx + P.f * rnd(4, 36), P.y + rnd(0, 20), P.f * rnd(10, 60), rnd(-90, -20), 0.6, i % 2 ? '#9fd0e0' : '#e8f4f8', 1, 300);
@@ -361,7 +361,7 @@ function specialTick() {
       let tx = cx + P.f * 50, best = 160;
       const cands = G.ents.filter(e => e.hp > 0).map(e => e.x + e.w / 2); if (G.boss) cands.push(G.boss.x);
       for (const x of cands) { const d = (x - cx) * P.f; if (d > 0 && d < best) { best = d; tx = x; } }
-      addHazard({ kind: 'proots', x: tx - 12, y: groundY(tx, P.y) - 26, w: 24, h: 26, t: 0, life: 0.75, dmg: D.dmg * m, team: 'p', set: new Set() });
+      addHazard({ kind: 'proots', x: tx - 12, y: groundY(tx, P.y) - 26, w: 24, h: 26, t: 0, life: 0.75, dmg: D.dmg * m, team: 'p', set: new Set() }); VFX.play('nature/thorns', tx - 44, groundY(tx, P.y), { count: 4, dur: 0.9 });
     }
   }
 }
@@ -371,7 +371,7 @@ function startDash() {
   P.state = 'dash'; P.stT = 0; useSt(18);
   // Mesma janela da cambalhota, incluindo o bônus original da Pena de gavião.
   P.inv = Math.max(P.inv, F.dash.dur * (0.85 + itemBonus('roll')));
-  P.vx = P.f * F.dash.spd * (P.inWater && !F.water ? 0.6 : 1); SFX.dash();
+  P.vx = P.f * F.dash.spd * (P.inWater && !F.water ? 0.6 : 1); SFX.dash(); if (P.onG) VFX.dust(P.x + 5, P.y + P.h, -P.f, 1.3);
 }
 function swapForm() {
   const P = G.P, list = G.save.forms.filter(f => f !== 'espirito');
@@ -386,7 +386,7 @@ function hurtPlayer(dmg, srcX, o = {}) {
   if (!P || P.state === 'dead') return false;
   if (!o.pit && (P.inv > 0 || G.lock > 0 && !o.force)) return false;
   if (!o.pit && !o.fixed) dmg = Math.round(dmg * DIFF.dmg);
-  P.hp -= dmg; P.inv = 0.85; SFX.hurt(); G.cam.shake = Math.max(G.cam.shake, 4); G.flash = 0.08; G.flashCol = '#c8402e';
+  P.hp -= dmg; P.inv = 0.85; SFX.hurt(); if (!o.pit) VFX.hurt(P); G.cam.shake = Math.max(G.cam.shake, 4); G.flash = 0.08; G.flashCol = '#c8402e';
   if (!o.pit) { const dir = srcX == null ? -P.f : (P.x + 5 < srcX ? -1 : 1); P.vx = dir * 120; P.vy = -130; P.state = 'hurt'; P.stT = 0; }
   for (let i = 0; i < 8; i++) part(P.x + 5, P.y + 10, rnd(-60, 60), rnd(-80, -10), 0.4, '#c8402e');
   if (P.hp <= 0) die();
@@ -620,7 +620,7 @@ function updateWolf(e, dt, dx, dy = 0) {
 
 function hitEnemy(e, dmg, dir, o = {}) {
   if (e.shell && dir && dir === -e.f) { shellBlock(e); return false; }
-  e.hp -= dmg; e.flash = 0.1; SFX.hit();
+  e.hp -= dmg; e.flash = 0.1; SFX.hit(); VFX.hitE(e, dir, o);
   if (e.fixed) { /* não se move */ }
   else if (o.melee && dir) {
     // golpe de perto empurra e atordoa um instante: o monstro não fica colado causando dano
@@ -637,6 +637,7 @@ function hitEnemy(e, dmg, dir, o = {}) {
 function killEnemy(e) {
   e.hp = 0;
   const eye = EYE[G.lvl.biome];
+  VFX.kill(e, eye);
   for (let i = 0; i < 16; i++) part(e.x + e.w / 2, e.y + e.h / 2, rnd(-70, 70), rnd(-90, 10), rnd(0.4, 0.9), i % 4 ? '#1c1622' : eye);
   G.save.mem += e.mem; floatText(e.x + e.w / 2, e.y - 4, '+' + e.mem); SFX.mem();
   if (e.onDeath) e.onDeath(e);
@@ -694,7 +695,7 @@ function updateHazards(dt) {
 
 // ---------- Partículas e textos flutuantes ----------
 function part(x, y, vx, vy, life, col, s = 1, g = 120) { if (G.parts.length < 600) G.parts.push({ x, y, vx, vy, life, max: life, col, s, g }); }
-function splash(x, y) { SFX.splash(); for (let i = 0; i < 12; i++) part(x + rnd(-6, 6), y, rnd(-40, 40), rnd(-110, -40), 0.5, i % 2 ? '#c8d8f0' : '#8aa8d0', 1, 400); }
+function splash(x, y) { SFX.splash(); VFX.splash(x, y); for (let i = 0; i < 12; i++) part(x + rnd(-6, 6), y, rnd(-40, 40), rnd(-110, -40), 0.5, i % 2 ? '#c8d8f0' : '#8aa8d0', 1, 400); }
 function updateParts(dt) {
   for (const p of G.parts) { p.life -= dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
   G.parts = G.parts.filter(p => p.life > 0);
@@ -747,7 +748,7 @@ function renderWorld() {
     for (const cn of L.canopies) if (cn.tx != null && cn.x + cn.w > cx - 40 && cn.x < cx + W + 40) drawTreeTrunk(cn.tx, cn.tw, 24 + (cn.y || 0), L.biome, cn.x);
     for (const o of L.hvines) if (o.tx != null && o.x > cx - 40 && o.x < cx + W + 40) drawTreeTrunk(o.tx, 6, 10, L.biome, o.x + 7);
   }
-  for (const f of L.fires) if (f.x > cx - 40 && f.x < cx + W + 40) drawFire(ctx, f.x, groundY(f.x), t, !!G.save.lit[f.id]);
+  for (const f of L.fires) if (f.x > cx - 70 && f.x < cx + W + 70) { if (G.save.lit[f.id]) VFX.keep('fogo' + f.id, 'fire/campfire', f.x, groundY(f.x) + 1, { layer: 'back', light: 0.8 }); else drawFire(ctx, f.x, groundY(f.x), t, false); }
   drawCaveBack(L, cx, t);
   const E = L.echoAt;
   if (E && E.x > cx - 40 && E.x < cx + W + 40) drawEcho(E, t);
@@ -785,6 +786,7 @@ function renderWorld() {
     ctx.restore();
     if (typeof drawJourneyNPCDetails === 'function') drawJourneyNPCDetails(n, gy);
   }
+  VFX.world(cx); VFX.render('back', cx);
   // inimigos
   const eye = EYE[L.biome];
   for (const e of G.ents) if (e.hp > 0 && e.x > cx - 40 && e.x < cx + W + 40) drawEnemy(ctx, e, e.x + e.w / 2, e.y + e.h, e.t, eye);
@@ -821,8 +823,10 @@ function renderWorld() {
     ctx.globalAlpha = Math.min(1, p.life / p.max * 1.5); rect(ctx, p.x, p.y, p.s, p.s, p.col);
   }
   ctx.globalAlpha = 1;
+  VFX.render('front', cx);
   for (const cn of L.canopies) if (cn.x + cn.w > cx - 10 && cn.x < cx + W + 10) drawCanopy(cn, L.biome, t);
   for (const o of L.hvines) if (o.x > cx - 30 && o.x < cx + W + 30) drawHangingVines(o, L.biome, t);
+  VFX.render('air', cx);
   if (G.debug) {
     // modo de depuração (tecla ` ou F2): sólidos em vermelho, espinhos em laranja, cipós em azul
     ctx.globalAlpha = 0.35;
@@ -839,7 +843,7 @@ function renderWorld() {
   // efeitos de tela
   if (L.biome === 'caatinga' && G.heat > 40) { ctx.globalAlpha = (G.heat - 40) / 60 * 0.22 * (G.heatMul > 1 ? 1.5 : 1); rect(ctx, 0, 0, W, H, '#ffe0a0'); ctx.globalAlpha = 1; }
   if (G.dark > 0) { ctx.globalAlpha = G.dark; rect(ctx, 0, 0, W, H, '#000'); ctx.globalAlpha = 1; }
-  if (L.cave) drawCaveDark();
+  if (L.cave) { drawCaveDark(); ctx.save(); ctx.translate(0, DY); VFX.render('top', cx); ctx.restore(); }
   if (G.flash > 0) { ctx.globalAlpha = Math.min(0.5, G.flash * 4); rect(ctx, 0, 0, W, H, G.flashCol); ctx.globalAlpha = 1; }
   if (G.rain > 0) for (let i = 0; i < 60 * G.rain; i++) { const x = (hash(i) * W + G.t * 40 * (1 + hash(i + 9))) % W, y = (hash(i + 3) * H + G.t * 260 * (1 + hash(i + 5))) % H; rect(ctx, x, y, 1, 4, '#9fc0d8'); }
 }

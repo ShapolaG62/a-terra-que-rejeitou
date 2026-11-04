@@ -18,7 +18,7 @@ function bossHurt(B, dmg, dir, o = {}) {
   if (B.hidden && !(FORMS[G.P.form] || {}).track) return false;
   B.hp -= dmg; B.flash = 0.1;
   if (B.kind === 'corposeco' && B.hp < 1) B.hp = 1; // ele não cai: para de atacar (ver corpoStill)
-  if (!o.quiet) SFX.hit();
+  if (!o.quiet) { SFX.hit(); VFX.hitB(B, dir, o); }
   if (o.poison) B.poison = 3;
   for (let i = 0; i < 4; i++) part(B.x, B.y - B.h * 0.6, (dir || 0) * rnd(20, 80) + rnd(-20, 20), rnd(-70, 0), 0.4, '#2a2230');
   const D = BOSSES[B.kind];
@@ -295,7 +295,7 @@ const BOSSES = {
         const [a0] = arenaX();
         const slots = [20, 85, 160, 230].map(v => a0 + v).filter(x => !G.hazards.some(h => h.kind === 'fire' && Math.abs(h.x - x) < 10));
         const x = pick(slots);
-        if (x != null) { addHazard({ kind: 'fire', x, y: GY - 14, w: 40, h: 14, life: 999, dmg: 10 }); SFX.fire(); floatText(x + 20, GY - 24, 'o capim pega fogo', '#ff8a3a'); }
+        if (x != null) { addHazard({ kind: 'fire', x, y: GY - 14, w: 40, h: 14, life: 999, dmg: 10 }); SFX.fire(); VFX.play('terra/acende', x + 20, GY); floatText(x + 20, GY - 24, 'o capim pega fogo', '#ff8a3a'); }
       }
     },
     update(B, dt) {
@@ -389,7 +389,7 @@ const BOSSES = {
         } break;
         case 'waveW': if (B.tt <= 0) {
           const [a0, a1] = arenaX(); const fromL = G.P.x + 5 > B.x;
-          addHazard({ kind: 'wave', x: fromL ? a0 - 20 : a1, y: GY - 18, w: 20, h: 20, vx: (fromL ? 1 : -1) * 125, life: 3.2, dmg: 20, update: waveUpd, draw: waveDraw });
+          addHazard({ kind: 'wave', x: fromL ? a0 - 20 : a1, y: GY - 18, w: 20, h: 20, vx: (fromL ? 1 : -1) * 125, life: 3.2, dmg: 20, update: waveUpd, draw: waveDraw }); VFX.splash(fromL ? a0 : a1, GY);
           SFX.splash(); go(B, 'rec', 1);
         } break;
         case 'rec': if (B.tt <= 0) go(B, 'idle', (B.phase === 2 ? 0.3 : 0.6) / sp); break;
@@ -428,7 +428,7 @@ const BOSSES = {
           if (B.phase === 2) shoot({ team: 'e', x: B.x, y: B.y - 80, vx: d2 / T * 0.6, vy: (dy - 0.5 * 420 * T * T) / T, w: 10, h: 10, dmg: 18, kind: 'rock', grav: 420, life: 3 });
           SFX.swing(); go(B, 'rec', 0.5);
         } break;
-        case 'stompW': if (B.tt <= 0) { SFX.boom(); G.cam.shake = 7; for (const s of [-1, 1]) addHazard({ kind: 'shock', x: B.x + s * 14, y: GY - 9, w: 8, h: 9, vx: s * 150, life: 2.2, dmg: 18, col: '#b08a70' }); for (let i = 0; i < 20; i++) part(B.x + rnd(-30, 30), GY, rnd(-40, 40), rnd(-60, -10), 0.9, '#c8a488', 2, 40); go(B, 'rec', 0.7); } break;
+        case 'stompW': if (B.tt <= 0) { SFX.boom(); G.cam.shake = 7; VFX.play('nature/quake', B.x, GY, { dur: 1.2 }); for (const s of [-1, 1]) addHazard({ kind: 'shock', x: B.x + s * 14, y: GY - 9, w: 8, h: 9, vx: s * 150, life: 2.2, dmg: 18, col: '#b08a70' }); for (let i = 0; i < 20; i++) part(B.x + rnd(-30, 30), GY, rnd(-40, 40), rnd(-60, -10), 0.9, '#c8a488', 2, 40); go(B, 'rec', 0.7); } break;
         case 'sunW': if (B.tt <= 0) { B.sunT = 5; showToast('Sol a pino', 'procure a sombra', 1.6); SFX.fire(); go(B, 'rec', 0.6); } break;
         case 'grabW': B.f = Math.sign(dx) || B.f; if (B.tt <= 0) { go(B, 'grab', 1); SFX.roar(); } break;
         case 'grab': { B.x += B.f * 150 * dt; B.hitDmg = 24; const [a0, a1] = arenaX(); if (B.x - 15 <= a0 || B.x + 15 >= a1 || B.tt <= 0) go(B, 'rec', 0.8); break; }
@@ -448,8 +448,8 @@ const BOSSES = {
       B.y = GY - 8 + Math.sin(B.t * 1.6) * 3;
       if (Math.random() < 0.5) part(B.x + rnd(-9, 9), B.y + 2, rnd(-5, 5), rnd(10, 30), 0.8, '#6a5a48', 1, 60);
       // três fases: a fome cresce (60%) e depois a terra inteira se volta contra você (30%)
-      if (B.phase === 1 && B.hp < B.hpMax * 0.6) { B.phase = 2; SFX.roar(); G.cam.shake = 6; floatText(B.x, B.y - 82, 'a fome cresce', '#c8402e'); bossFx('ring', B.x, B.y - 40, B.f, { r: 150 }); }
-      if (B.phase === 2 && B.hp < B.hpMax * 0.3) { B.phase = 3; SFX.roar(); G.cam.shake = 8; floatText(B.x, B.y - 82, 'a terra me pertence', '#ff4a2a'); bossFx('ring', B.x, B.y - 40, B.f, { r: 180 }); }
+      if (B.phase === 1 && B.hp < B.hpMax * 0.6) { B.phase = 2; SFX.roar(); G.cam.shake = 6; VFX.play('shadow/dark-explosion', B.x, GY, { dur: 2.2 }); floatText(B.x, B.y - 82, 'a fome cresce', '#c8402e'); bossFx('ring', B.x, B.y - 40, B.f, { r: 150 }); }
+      if (B.phase === 2 && B.hp < B.hpMax * 0.3) { B.phase = 3; SFX.roar(); G.cam.shake = 8; VFX.play('shadow/dark-explosion', B.x, GY, { dur: 2.2 }); floatText(B.x, B.y - 82, 'a terra me pertence', '#ff4a2a'); bossFx('ring', B.x, B.y - 40, B.f, { r: 180 }); }
       const ph3 = B.phase === 3;
       if (B.hp <= B.hpMax * 0.15 && B.st !== 'still') { go(B, 'still', 999); G.hazards = G.hazards.filter(h => h.team === 'p'); G.projs = G.projs.filter(p => p.team === 'p'); for (const e of G.ents) e.hp = 0; STORY.corpoStill(B); return; }
       switch (B.st) {
@@ -486,7 +486,7 @@ const BOSSES = {
           for (const x of [a0 + 30, a1 - 40]) { const e = makeEnemy(pick(['flyer', 'crawler', 'lanceiro', 'brute']), x, null); if (ET[e.type].fly) { e.y = 90; e.hy = 90; } e.mem = 0; G.ents.push(e); for (let i = 0; i < 10; i++) part(x, e.y, rnd(-30, 30), rnd(-40, 0), 0.6, '#1c1622'); }
           go(B, 'rec', 0.8);
         } break;
-        case 'blink': if (B.tt <= 0) {
+        case 'blink': if (B.tt <= 0) { VFX.blink(B);
           for (let i = 0; i < 14; i++) part(B.x, B.y - 34, rnd(-60, 60), rnd(-60, 20), 0.6, '#6a5a48');
           const [a0, a1] = arenaX(); B.x = ph3 ? clamp(G.P.x + 5 - G.P.f * 50, a0 + 20, a1 - 20) : G.P.x + 5 < (a0 + a1) / 2 ? a1 - 30 : a0 + 30; // na fase 3 aparece nas suas costas
           for (let i = 0; i < 14; i++) part(B.x, B.y - 34, rnd(-60, 60), rnd(-60, 20), 0.6, '#6a5a48');
@@ -522,4 +522,4 @@ function waveDraw(h) { for (let i = 0; i < h.w; i++) { const hh = h.h * Math.sin
 
 function howlUpd(h, dt) { h.r += 170 * dt; const P = G.P, d = Math.hypot(P.x + 5 - h.x, (P.y + 11 - h.y) * 2); if (!h.hit && Math.abs(d - h.r) < 9 && P.state !== 'dash') { h.hit = hurtPlayer(14, h.x); if (h.hit) P.slow = 1; } }
 function tornadoUpd(h, dt) { const P = G.P; h.x += clamp(P.x + 5 - (h.x + h.w / 2), -1, 1) * 46 * dt; h.tick -= dt; if (h.tick <= 0 && overlap(h, P)) { h.tick = 0.5; if (hurtPlayer(h.dmg, h.x + h.w / 2)) P.vy = -200; } if (Math.random() < 0.8) part(h.x + rnd(0, h.w), GY - rnd(0, 6), rnd(-30, 30), rnd(-80, -30), 0.6, pick(['#8a7a5e', '#c8b898', '#5a4a38']), 1, -20); }
-function tornadoDraw(h) { const k = Math.min(1, h.t / 0.4) * Math.min(1, h.life); ctx.globalAlpha = 0.75 * k; for (let i = 0; i < h.h; i += 2) { const w = 4 + i / h.h * 16, o = Math.sin(G.t * 9 + i * 0.25) * 3; rect(ctx, h.x + h.w / 2 - w / 2 + o, GY - i, w, 2, i % 6 < 3 ? '#a8987a' : '#6a5a44'); } ctx.globalAlpha = 1; }
+function tornadoDraw(h) { VFX.keep('tornado', 'nature/tornado', h.x + h.w / 2, GY, { height: 88, palette: VFX.PAL.shadow, dust: VFX.PAL.bone, layer: 'front' }); return; const k = Math.min(1, h.t / 0.4) * Math.min(1, h.life); ctx.globalAlpha = 0.75 * k; for (let i = 0; i < h.h; i += 2) { const w = 4 + i / h.h * 16, o = Math.sin(G.t * 9 + i * 0.25) * 3; rect(ctx, h.x + h.w / 2 - w / 2 + o, GY - i, w, 2, i % 6 < 3 ? '#a8987a' : '#6a5a44'); } ctx.globalAlpha = 1; }

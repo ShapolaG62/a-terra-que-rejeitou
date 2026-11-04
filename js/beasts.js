@@ -382,7 +382,7 @@ function drawStars(x, y, t) {
 }
 
 // ---------- efeitos de golpe dos chefes (como nas pranchas) ----------
-function bossFx(k, x, y, f, o = {}) { G.bfx.push(Object.assign({ k, x, y, f, t: 0, life: k === 'burst' ? 0.35 : k === 'ring' ? 0.8 : 0.25 }, o)); }
+function bossFx(k, x, y, f, o = {}) { if (k === 'burst') VFX.burst(x, y); if (k === 'ring' && o.r < 100) VFX.play('fire/fire-ring', x, y + 6, { reach: o.r, dur: 0.8 }); G.bfx.push(Object.assign({ k, x, y, f, t: 0, life: k === 'burst' ? 0.35 : k === 'ring' ? 0.8 : 0.25 }, o)); }
 function updateBossFx(dt) { for (const e of G.bfx) e.t += dt; G.bfx = G.bfx.filter(e => e.t < e.life); }
 function drawBossFx() {
   for (const e of G.bfx) {

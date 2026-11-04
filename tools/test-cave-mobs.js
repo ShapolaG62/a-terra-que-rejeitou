@@ -9,7 +9,7 @@ const source = f => fs.readFileSync(path.join(__dirname, '..', 'js', f), 'utf8')
 
 function game() {
   const pixels = [], hits = [], ctx = { fillRect(...p) { assert.ok(p.every(Number.isFinite)); pixels.push([...p, this.fillStyle]); } };
-  const sandbox = vm.createContext({ ctx, I: { down: {}, pressed: {} }, SFX: new Proxy({}, { get: () => () => {} }),
+  const sandbox = vm.createContext({ ctx, I: { down: {}, pressed: {} }, VFX: new Proxy({}, { get: () => () => {} }), SFX: new Proxy({}, { get: () => () => {} }),
     document: { createElement: () => ({ getContext: () => ({ setTransform() {}, drawImage() {}, fillRect() {}, createRadialGradient: () => ({ addColorStop() {} }) }) }) }, hits });
   const core = source('core.js');
   vm.runInContext(core.slice(core.indexOf('const W'), core.indexOf('const cv')) +

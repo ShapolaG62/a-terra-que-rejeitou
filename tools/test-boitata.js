@@ -13,7 +13,7 @@ function game(spawnX = 310) {
   const delayed = [], hits = [], scenes = [];
   const sandbox = vm.createContext({
     I: { down: {}, pressed: {} },
-    SFX: new Proxy({}, { get: () => () => {} }),
+    VFX: new Proxy({}, { get: () => () => {} }), SFX: new Proxy({}, { get: () => () => {} }),
     BOSS_INTRO: {}, STORY: {}, hud: { cache: {} },
     setTimeout(fn) { delayed.push(fn); },
     showToast() {}, floatText() {}, onBossDown() {},

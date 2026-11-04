@@ -153,7 +153,7 @@ function caveInteractables(add) {
 }
 function purifyGate(g) {
   scene(async () => {
-    G.P.vx = 0; SFX.fire(); g.dis = 0; G.flash = 0.2; G.flashCol = '#bfe4ff';
+    G.P.vx = 0; SFX.fire(); g.dis = 0; G.flash = 0.2; G.flashCol = '#bfe4ff'; VFX.play('terra/selo', g.x, g.y, { height: g.h });
     for (let i = 0; i < 50; i++) part(g.x + rnd(-g.w / 2 - 4, g.w / 2 + 4), g.y - rnd(0, g.h), rnd(-20, 20), rnd(-70, -20), 1.2, pick(['#bfe4ff', '#e8f6ff', '#7ab8ff']), pick([1, 2]), -30);
     await wait(1.1);
     SV().gates.push(g.id); writeSave();
@@ -369,7 +369,7 @@ function updateCave(dt) {
     if (m.need && !gateOpen(m.need)) continue;
     const near = tr > 0 && Math.abs(m.x - (P.x + 5)) < tr * 0.6 + m.w / 2 && P.y + P.h > m.y;
     m.lit = clamp(m.lit + (near ? dt * 1.4 : -dt * 0.25), 0, 1);
-    if (m.lit >= 1 && !SV().murals.includes(m.id)) { SV().murals.push(m.id); writeSave(); SFX.echo(); showToast('Pintura ' + MURALS[m.id].n, MURALS[m.id].s, 3.2); }
+    if (m.lit >= 1 && !SV().murals.includes(m.id)) { SV().murals.push(m.id); writeSave(); SFX.echo(); VFX.memory(G.P.x + 5, G.P.y + G.P.h); showToast('Pintura ' + MURALS[m.id].n, MURALS[m.id].s, 3.2); }
   }
   // Poço dos Ecos: o Boitatá passa lá embaixo, iluminando o poço por instantes
   if (L.glimpse && !SV().ev.boitata) {
@@ -840,7 +840,7 @@ function breakSupport(B, s) {
   if (s.broken) return;
   s.broken = true; B.chains--; B.glow = 1;
   SFX.boom(); G.cam.shake = 9; G.flash = 0.2; G.flashCol = '#ff9a3a';
-  bossFx('burst', s.x, GY, 1, { col: '#c8b8a0' });
+  bossFx('burst', s.x, GY, 1, { col: '#c8b8a0' }); VFX.play('terra/corrente', s.x, GY - 40, { floor: 40 });
   for (let i = 0; i < 30; i++) part(s.x + rnd(-8, 8), GY - rnd(0, 60), rnd(-60, 60), rnd(-90, 0), rnd(0.5, 1.1), pick(['#6a5a4a', '#8a7a6a', '#ff9a3a']), 2, 300);
   floatText(s.x, GY - 70, 'corrente rompida', '#ffd27a');
   hud.cache = {};
@@ -1070,7 +1070,7 @@ STORY.boitataFreed = async function (B) {
   await talk([['', 'Antes de partir, uma escama se desprende e vira uma chama azul-esbranquiçada. Ela flutua até você.']]);
   G.save.cold = true; SV().ev.boitata = true; giveRelic('olho_fogo_frio'); writeSave();
   G.relic = { x: G.P.x, y: G.P.y - 20, cd: 0 };
-  SFX.echo(); G.flash = 0.35; G.flashCol = '#bfe4ff';
+  SFX.echo(); G.flash = 0.35; G.flashCol = '#bfe4ff'; VFX.play('holy/holy-pillar', G.P.x + 5, G.P.y + G.P.h, { palette: VFX.PAL.ice, dur: 2.2 });
   showToast('Olho de Fogo Frio', 'luz ancestral · chama purificadora · brasa de proteção', 3.2);
   hint('<kbd>E</kbd> perto dos <b>Cipós-de-Sangue</b>: purificar com o fogo frio · nas fogueiras: <b>Viajar</b>', '<b>Agir</b> perto dos <b>Cipós-de-Sangue</b>: purificar · nas fogueiras: <b>Viajar</b>', 8);
   G.lvl.arena.cleared = true; resetArena(); musicSet('gruta');

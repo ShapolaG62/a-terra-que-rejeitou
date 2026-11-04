@@ -24,7 +24,7 @@ function game() {
   }
   const sandbox = vm.createContext({
     ctx, cv: {}, stage: element(), I: { down: {}, pressed: {}, mouseT: -Infinity }, L: { touch: false },
-    SFX: new Proxy({}, { get: () => () => {} }), soundWood() {}, soundNote() {}, soundAir() {},
+    VFX: new Proxy({}, { get: () => () => {} }), SFX: new Proxy({}, { get: () => () => {} }), soundWood() {}, soundNote() {}, soundAir() {},
     AU: { ctx: null, master: null, on: true, vol: 0.8, mus: 1, music: { volume: 0.28 } },
     musicVol() { return 0.8; }, musicSet() {},
     $: selector => { if (!elements.has(selector)) elements.set(selector, element()); return elements.get(selector); },

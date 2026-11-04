@@ -59,6 +59,7 @@ Para testar esse capítulo e os dois retornos sem alterar seu progresso, abra ht
 | `js/story.js` | roteiro, fases, diálogos, menus e laço principal |
 | `js/journey.js` | convivência na margem, passarela, escolhas da fogueira, retorno do Mapinguari e ambiência |
 | `js/companions.js` | encontros de Cecília, Bento, Rosa e Celina; gestos que mudam o cenário, lembranças e reencontros |
+| `js/vfx.js`, `js/pixelfx.bundle.js`, `vendor/pixelfx/` | efeitos visuais (biblioteca pixelfx e os efeitos próprios em `src/fx/terra`); recrie o bundle com `node tools/build-vfx.mjs` |
 | `js/gruta.js` | Gruta dos Antigos: escuridão, ruído, pinturas, Boitatá, Olho de Fogo Frio, selos e viagem |
 | `server.js` | servidor local mínimo |
 | `tools/` | ferramentas de apoio (não fazem parte do jogo) |
