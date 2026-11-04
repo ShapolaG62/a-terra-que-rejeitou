@@ -15,6 +15,7 @@ function game() {
     fillRect(...args) { assert.ok(args.every(Number.isFinite), `pixel inválido: ${args}`); pixels.push(args); },
     drawImage(...args) { images.push(args); },
     createLinearGradient() { return { addColorStop() {} }; },
+    createRadialGradient() { return { addColorStop() {} }; },
     getImageData() { return { data: new Uint8ClampedArray(40 * 64 * 4) }; },
   }, { get: (o, k) => k in o ? o[k] : () => {} });
   function element() {
@@ -58,7 +59,8 @@ function game() {
     journeyDeparturePending, journeyContinueToCerrado, journeyExitLocation, STORY,
     COMPANIONS, companionState, companionMeet, companionHelp, companionCamp, companionReturn,
     companionPending, companionInteractables, companionFinalMemory, drawCompanionProp, enterAct,
-    travelScene, nextAct, enterGruta, scene, update, startBlend, drawTransition, transC, captureTravelArrival })`, sandbox);
+    travelScene, nextAct, enterGruta, scene, update, startBlend, drawTransition, transC, captureTravelArrival,
+    useCavePassage, caveInteractables, cavePassageOffset, drawCavePassagePlayer, drawCaveBack, homeLevel })`, sandbox);
   return { ...api, dialogs, saves, choices, pixels, images, sandbox, run: code => vm.runInContext(code, sandbox) };
 }
 
@@ -299,7 +301,11 @@ test('cada resposta nas conversas regionais fica no diário e volta no reencontr
     assert.equal(g.companionState(id).returned, true); assert.equal(g.G.save.frag, choice);
     assert.ok(g.dialogs.some(([who, t]) => who === c.who && t === c.recall[c.choices[choice].key]));
     const opts = []; g.companionInteractables((...a) => opts.push(a));
-    assert.ok(opts.some(a => a[2].startsWith('Seguir para')));
+    assert.equal(opts.some(a => a[2].startsWith('Seguir para')), id !== 'cerrado');
+    if (id === 'cerrado') {
+      g.G.save.ev.boitata = true; const after = []; g.companionInteractables((...a) => after.push(a));
+      assert.ok(after.some(a => a[2] === 'Seguir para o Pantanal'));
+    }
     g.G.save.act = c.act + 1; const visit = []; g.companionInteractables((...a) => visit.push(a));
     assert.equal(visit.some(a => a[2].startsWith('Seguir para')), false);
   }
@@ -447,14 +453,14 @@ test('a viagem completa e a viagem pulada terminam no bioma correto e conservam 
   }
 });
 
-test('todas as fronteiras mantêm a ordem dos atos, a gruta e a primeira cena do coração', async () => {
-  for (const [from, to, act] of [['prologo', 'amazonia', 0], ['cerrado', 'gruta', 2], ['gruta', 'pantanal', 2], ['pantanal', 'caatinga', 3], ['caatinga', 'mata', 4], ['mata', 'coracao', 5]]) {
+test('as fronteiras ligam os biomas sem tratar a gruta como um ato', async () => {
+  for (const [from, to, act] of [['prologo', 'amazonia', 0], ['cerrado', 'pantanal', 2], ['pantanal', 'caatinga', 3], ['caatinga', 'mata', 4], ['mata', 'coracao', 5]]) {
     const g = game(); g.run('wait = realWait; waitUntil = realWaitUntil;');
     g.G.save.act = act; g.G.save.sub = from === 'gruta' ? 'gruta' : null; g.G.save.ev.grutaIn = 1;
     g.loadLevel(from); for (const t of g.G.lvl.triggers) t.done = true;
     g.G.P = g.makePlayer(280, g.groundY(280)); g.G.P.form = 'zarabatana'; g.G.P.onG = true;
     let done = false, error;
-    const task = g.scene(() => from === 'cerrado' ? g.enterGruta() : g.nextAct()).then(() => { done = true; }, e => { error = e; done = true; });
+    const task = g.scene(() => g.nextAct()).then(() => { done = true; }, e => { error = e; done = true; });
     let sawArrival = false;
     for (let i = 0; i < 700 && !done; i++) {
       await advanceGame(g, 1 / 60);
@@ -471,4 +477,113 @@ test('todas as fronteiras mantêm a ordem dos atos, a gruta e a primeira cena do
       assert.ok(g.G.P.x < 235, 'a chegada não atravessa a primeira entrega de forma');
     }
   }
+});
+
+test('a entrada no Cerrado exige E perto da pedra e a descida conserva o ato e os recursos', async () => {
+  const g = game(); region(g, 'cerrado'); g.run('wait = realWait; waitUntil = realWaitUntil;');
+  g.G.P.x = 300; await g.enterGruta(); assert.equal(g.G.lvl.id, 'cerrado');
+  g.G.P.x = 413; g.G.P.onG = true; g.G.P.hp = 63; g.G.P.flasks = 1;
+  g.G.save.fire = { lvl: 'cerrado', x: 325 }; g.G.save.mem = 147;
+  for (const t of g.G.lvl.triggers) t.done = true;
+  g.run('checkInteract();'); assert.equal(g.G.interact.label, 'Descer para a gruta');
+  const task = g.G.interact.fn(); assert.ok(g.G.cavePassage);
+  await finishFlow(g, task);
+  assert.equal(g.G.lvl.id, 'gruta'); assert.equal(g.G.lvl.parent, 'cerrado');
+  assert.equal(g.G.save.act, 2); assert.equal(g.G.save.sub, 'gruta'); assert.equal(g.homeLevel(), 'gruta');
+  assert.equal(g.G.P.hp, 63); assert.equal(g.G.P.flasks, 1); assert.equal(g.G.save.mem, 147);
+  assert.equal(g.G.cavePassage, null); assert.equal(g.G.lock, 0);
+  assert.equal(g.G.save.caveReturn.x, 430);
+  assert.equal(g.G.save.fire.lvl, 'gruta');
+  assert.equal(g.G.lvl.triggers.find(t => t.x === 110).done, false);
+  assert.equal(g.run('ROTA.includes("gruta")'), false);
+});
+
+test('subir devolve à mesma entrada e mantém as conquistas da gruta, inclusive após recarregar', async () => {
+  const g = game(); region(g, 'cerrado'); g.run('wait = realWait; waitUntil = realWaitUntil;');
+  g.G.P.x = 425; g.G.P.onG = true; g.G.save.fire = { lvl: 'cerrado', x: 325 };
+  await finishFlow(g, g.scene(g.enterGruta));
+  const saved = JSON.parse(JSON.stringify(g.saves.at(-1)));
+  g.G.save = saved; g.loadLevel(g.homeLevel());
+  g.G.save.ev.boitata = true; g.G.save.cold = true; g.G.save.murals.push('m1');
+  g.G.P = g.makePlayer(51, g.GY); g.G.P.onG = true; g.G.P.hp = 42; g.G.P.flasks = 0;
+  g.run('checkInteract();'); assert.equal(g.G.interact.label, 'Subir para o Cerrado');
+  await finishFlow(g, g.G.interact.fn());
+  assert.equal(g.G.lvl.id, 'cerrado'); assert.equal(g.G.P.x + 5, 430); assert.equal(g.G.save.act, 2);
+  assert.equal(g.G.save.sub, null); assert.equal(g.G.save.fire.x, 325); assert.equal(g.G.save.caveReturn, null);
+  assert.equal(g.G.P.hp, 42); assert.equal(g.G.P.flasks, 0); assert.equal(g.G.save.cold, true);
+  assert.ok(g.G.save.murals.includes('m1')); assert.equal(g.G.save.ev.boitata, true);
+  await finishFlow(g, g.scene(g.enterGruta)); assert.equal(g.G.lvl.arena.cleared, true);
+});
+
+test('saves antigos da gruta podem subir e o fim do interior não avança para outro bioma', async () => {
+  const g = game(); g.G.save.act = 2; g.G.save.sub = 'gruta'; g.G.save.ev.grutaIn = true;
+  g.loadLevel('gruta'); g.G.P = g.makePlayer(2970, g.GY); g.G.P.onG = true;
+  for (const t of g.G.lvl.triggers) t.done = true;
+  await g.nextAct(); assert.equal(g.G.lvl.id, 'gruta'); assert.equal(g.G.save.act, 2);
+  let exits = []; g.caveInteractables((...a) => exits.push(a));
+  assert.equal(exits.some(a => a[0] === 2970 && a[2] === 'Subir para o Cerrado'), false);
+  g.G.save.gates.push('gruta_saida'); exits = []; g.caveInteractables((...a) => exits.push(a));
+  assert.equal(exits.some(a => a[0] === 2970 && a[2] === 'Subir para o Cerrado'), true);
+  g.G.P.x = 51; g.run('wait = realWait; waitUntil = realWaitUntil;');
+  await finishFlow(g, g.scene(() => g.useCavePassage('up', g.G.lvl.caveExits[0])));
+  assert.equal(g.G.lvl.id, 'cerrado'); assert.equal(g.G.P.x + 5, 430); assert.equal(g.G.save.sub, null);
+});
+
+test('a animação desce e sobe sem mover a hitbox para dentro do chão', () => {
+  const g = game(); region(g, 'cerrado'); g.G.P.x = 425;
+  const y = g.G.P.y;
+  for (const direction of ['down', 'up']) for (const phase of ['depart', 'arrive']) {
+    g.G.cavePassage = { direction, phase, t0: 0, dur: 1, x: 430, y: g.GY };
+    for (const t of [0, 0.5, 1]) {
+      g.G.rt = t; g.drawCavePassagePlayer(g.G.P, t);
+      assert.ok(Number.isFinite(g.cavePassageOffset())); assert.equal(g.G.P.y, y);
+    }
+  }
+  g.drawCaveBack(g.G.lvl, 216, 1); g.loadLevel('gruta'); g.drawCaveBack(g.G.lvl, 0, 1);
+});
+
+test('Capelobo aparece na arena depois de entrar e sair da gruta durante a exploração sem dano', async () => {
+  const g = game(); region(g, 'cerrado');
+  g.G.exploring = true; g.G.save.seen.capelobo = true;
+  g.run('wait = realWait; waitUntil = realWaitUntil;');
+  g.G.P.x = 425; g.G.P.onG = true;
+  await finishFlow(g, g.scene(g.enterGruta));
+  assert.notEqual(g.G.lvl.arena.cleared, true, 'Boitatá também continua disponível');
+  await finishFlow(g, g.scene(() => g.useCavePassage('up', g.G.lvl.caveExits[0])));
+  assert.equal(g.G.lvl.id, 'cerrado'); assert.notEqual(g.G.lvl.arena.cleared, true);
+  g.G.P.x = 1999; g.run('checkArena();'); assert.equal(g.G.boss, null);
+  g.G.P.x = 2001; g.run('checkArena();');
+  assert.equal(g.G.boss.kind, 'capelobo'); assert.equal(g.G.lvl.arena.active, true);
+  assert.ok(g.G.boss.hp > 0);
+});
+
+test('escolher Cerrado na exploração permite lutar de novo sem alterar a vitória no save original', async () => {
+  const g = game(); region(g, 'cerrado');
+  g.G.save.harmony.capelobo = 'purificar'; g.G.save.frag = 2; g.G.save.seen.capelobo = true;
+  g.companionState('cerrado').returned = true;
+  const original = g.G.save;
+  g.loadLevel('cerrado'); assert.equal(g.G.lvl.arena.cleared, true);
+  g.run('function clearSave() {} function loadSave() { return null; }');
+  g.run(source('explore.js'));
+  g.run('menu = async () => "cerrado";');
+  await g.run('explorationMenu()');
+  assert.notEqual(g.G.save, original); assert.equal(original.harmony.capelobo, 'purificar');
+  assert.equal(original.journey.regions.cerrado.returned, true);
+  assert.equal(g.G.save.harmony.capelobo, undefined); assert.equal(g.G.save.frag, 2);
+  assert.notEqual(g.G.lvl.arena.cleared, true); assert.equal(g.companionState('cerrado').returned, false);
+  assert.equal(g.run('hurtPlayer(40, 0)'), false);
+  g.G.save.seen.capelobo = true; g.G.P.x = 2001; g.run('checkArena();');
+  assert.equal(g.G.boss.kind, 'capelobo'); assert.equal(g.G.lvl.arena.active, true);
+  g.run('writeSave();'); assert.equal(g.saves.length, 0);
+});
+
+test('uma vitória real no Capelobo continua concluída ao voltar da gruta', async () => {
+  const g = game(); region(g, 'cerrado'); g.run('wait = realWait; waitUntil = realWaitUntil;');
+  g.G.save.harmony.capelobo = 'poupar'; g.companionState('cerrado').returned = true;
+  g.G.P.x = 425; g.G.P.onG = true;
+  await finishFlow(g, g.scene(g.enterGruta));
+  await finishFlow(g, g.scene(() => g.useCavePassage('up', g.G.lvl.caveExits[0])));
+  g.G.P.x = 2001; g.run('checkArena();');
+  assert.equal(g.G.boss, null); assert.equal(g.G.lvl.arena.cleared, true);
+  assert.equal(g.G.save.harmony.capelobo, 'poupar');
 });

@@ -12,9 +12,16 @@ const source = name => readFileSync(path.join(root, 'js', name), 'utf8');
 
 function game() {
   const pixels = [];
-  const ctx = { globalAlpha: 1, fillRect(...rect) { pixels.push([...rect, this.globalAlpha]); } };
+  const stack = [], transforms = [];
+  const ctx = { globalAlpha: 1, fillRect(...rect) { pixels.push([...rect, this.globalAlpha]); },
+    save() { stack.push(this.globalAlpha); }, restore() { this.globalAlpha = stack.pop(); },
+    translate(...v) { transforms.push(v); }, rotate(v) { transforms.push([v]); }, scale(...v) { transforms.push(v); } };
+  ctx.beginPath = ctx.fill = ctx.stroke = () => {};
+  ctx.drawImage = (source, ...v) => assert.ok(v.every(Number.isFinite));
+  for (const method of ['ellipse', 'moveTo', 'lineTo']) ctx[method] = (...v) => assert.ok(v.every(Number.isFinite));
   const sandbox = vm.createContext({
     ctx, I: { down: {}, pressed: {} },
+    document: { createElement: () => ({ getContext: () => ({ setTransform() {}, drawImage() {}, fillRect() {}, save() {}, restore() {}, createRadialGradient: () => ({ addColorStop() {} }) }) }) },
     SFX: new Proxy({}, { get: () => () => {} }),
   });
   const core = source('core.js');
@@ -25,7 +32,7 @@ function game() {
     vm.runInContext(source(file), sandbox, { filename: file });
   }
   vm.runInContext("G.lvl = LV({ id: 'test', w: 2000, biome: 'prologo', act: 0 }).g(-1000, 2000); G.P = makePlayer(100, GY); G.P.onG = true; G.P.plat = G.lvl.solids[0];", sandbox);
-  return { ...vm.runInContext('({ G, I, FORMS, startDash, updatePlayer, hurtPlayer, howlUpd, drawPlayer })', sandbox), ctx, pixels };
+  return { ...vm.runInContext('({ G, I, FORMS, startDash, updatePlayer, hurtPlayer, howlUpd, drawPlayer, drawHuman, SPEC })', sandbox), ctx, pixels, stack, transforms };
 }
 
 // Durações anteriores à troca da cambalhota, para detectar alterações no i-frame.
@@ -157,5 +164,17 @@ test('desenha todas as formas e rastros nos dois sentidos, restaurando a opacida
         assert.equal(ctx.globalAlpha, 1);
       }
     }
+  }
+});
+
+test('animações importadas preservam a opacidade e não deixam transformações no próximo desenho', () => {
+  const { drawHuman, SPEC, ctx, pixels, stack, transforms } = game();
+  for (const kind of ['idle', 'run', 'dash', 'jump', 'fall', 'climb', 'kneel', 'hurt']) {
+    ctx.globalAlpha = 0.6; pixels.length = 0; transforms.length = 0;
+    drawHuman(ctx, 100, 150, -1, { kind, ph: 0.7, t: 1, p: 0.3, moving: true }, SPEC.arco);
+    assert.equal(ctx.globalAlpha, 0.6); assert.equal(stack.length, 0);
+    assert.ok(pixels.length > 0); assert.ok(pixels.every(p => p[4] <= 0.6));
+    assert.ok(pixels.some(p => p[4] === 0.6), 'o corpo mantém sua opacidade');
+    assert.ok(transforms.flat().every(Number.isFinite));
   }
 });

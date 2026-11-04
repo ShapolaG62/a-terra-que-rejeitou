@@ -425,12 +425,11 @@ function spawnEnemies() { G.ents = G.lvl.spawns.map(s => makeEnemy(s.type, s.x, 
 function makeEnemy(type, x, y) {
   const fz = FAUNA[G.lvl.biome] || FAUNA.amazonia;
   if (fz[type]) { const opts = fz[type]; type = opts[Math.floor(hash(Math.round(x) * 7 + 3) * opts.length)]; }
-  // cada fase deixa a fauna mais resistente, mais forte e um pouco mais rápida
-  const d = ET[type], a = G.lvl.act || 0, mul = 1 + 0.45 * a;
-  const e = { type, x, y: 0, w: d.w, h: d.h, vx: 0, vy: 0, f: -1, hp: Math.round(d.hp * mul * DIFF.enemyHp), dmg: Math.round(d.dmg * (1 + 0.25 * a)), spd: (d.spd || 0) * (1 + 0.08 * a), t: rnd(0, 5), flash: 0, wind: 0, swing: 0, rec: 0, cd: rnd(0.6, 2), hx: x, hy: y, poison: 0, pt: 0, mem: d.mem + a * 3, mode: 'home', onG: false };
-  e.hpMax = e.hp; e.ai = d.ai || type;
-  e.y = (y == null ? groundY(x + d.w / 2) : y) - d.h;
-  if (d.fly) { e.hy = e.y; } else e.stepH = 18;
+  const d = ET[type], a = G.lvl.act || 0, personality = hash(Math.round(x * 13) + type.length * 71);
+  const e = { type, x, y: 0, w: d.w, h: d.h, vx: 0, vy: 0, f: -1, hp: Math.round(d.hp * (1 + 0.45 * a) * DIFF.enemyHp), dmg: Math.round(d.dmg * (1 + 0.25 * a)), spd: (d.spd || (d.ai === 'spitter' || type === 'spitter' ? 22 : 0)) * (1 + 0.08 * a), t: rnd(0, 5), flash: 0, wind: 0, swing: 0, rec: 0, cd: 0.65 + personality * 0.65, hx: x, hy: y, poison: 0, pt: 0, mem: d.mem + a * 3, mode: 'home', onG: false,
+    personality, gait: 0, aware: false, memory: 0, alertT: 0, patrolPause: 0, attacks: 0, motion: { phase: 'idle', progress: 0, variant: '' } };
+  e.hpMax = e.hp; e.ai = d.ai || type; e.y = (y == null ? groundY(x + d.w / 2) : y) - d.h;
+  if (d.fly) e.hy = e.y; else e.stepH = 18;
   return e;
 }
 function enemyPatrolBounds(e) {
@@ -438,99 +437,187 @@ function enemyPatrolBounds(e) {
   if (min == null || e.x >= min) return;
   e.x = min; e.f = 1; e.vx = Math.abs(e.vx);
 }
+function enemyMotion(e, phase, progress = 0, variant = e.attackVariant || '') {
+  const m = e.motion || (e.motion = {}); m.phase = phase; m.progress = clamp(progress, 0, 1); m.variant = variant;
+}
+function enemySight(e, px, py) {
+  const ex = e.x + e.w / 2, ey = e.y + e.h * 0.35;
+  for (let t = 0.15; t < 0.95; t += 0.15) { const s = solidAt(lerp(ex, px, t), lerp(ey, py, t)); if (s && s.t === 'g' && (s.wall || s.block)) return false; }
+  return true;
+}
+function enemyNotice(e, dx, dy, dt) {
+  const range = e.ai === 'spitter' ? 175 : e.ai === 'wolf' ? 165 : e.ai === 'flyer' ? 140 : 125;
+  const P = G.P, safe = G.lvl.enemyMinX != null && P.x + 5 < G.lvl.enemyMinX;
+  const seen = !safe && Math.abs(dx) < range && Math.abs(dy) < (ET[e.type].fly ? 115 : 48) && enemySight(e, P.x + 5, P.y + 11);
+  e.alertT = Math.max(0, e.alertT - dt);
+  if (seen) {
+    if (!e.aware) { e.alertMax = 0.24 + e.personality * 0.16; e.alertT = e.alertMax; }
+    e.aware = true; e.memory = 2.1 + e.personality; e.lastSeen = P.x + 5;
+  } else { e.memory = safe ? 0 : Math.max(0, e.memory - dt); if (!e.memory) e.aware = false; }
+  e.cd = Math.max(0, e.cd - dt);
+}
+// Vizinhos se alternam para dar tempo de reconhecer os avisos.
+function enemyCanAttack(e) {
+  if (e.cd > 0 || e.alertT > 0 || (G.enemyAttackGap || 0) > 0 || !e.aware) return false;
+  let active = 0;
+  for (const o of G.ents) if (o !== e && o.hp > 0 && o.motion && ['windup', 'attack'].includes(o.motion.phase)) {
+    active++;
+    if (!ET[e.type].fly && !ET[o.type].fly && Math.abs(o.x - e.x) < 80 && Math.abs(o.y - e.y) < 36) return false;
+  }
+  return active < 2;
+}
+function enemyPrepare(e, wind, variant) {
+  e.wind = e.windMax = wind; e.swing = e.rec = 0; e.attackVariant = variant; e.vx = 0;
+  e.contactHit = e.hitDone = false; e.attacks++; G.enemyAttackGap = 0.2; enemyMotion(e, 'windup');
+}
+function enemyRecover(e, duration) {
+  e.wind = e.swing = 0; e.rec = e.recMax = duration; e.noTouch = true; e.cd = 0.65 + e.personality * 0.5; enemyMotion(e, 'recover');
+}
+function enemyMove(e, target, dt, spacing = true) {
+  const previous = e.f;
+  if (target && e.onG) { e.f = Math.sign(target); if (pitAhead(e, Math.max(3, Math.abs(target) * dt + 3))) target = 0; e.f = previous; }
+  if (target && spacing) for (const o of G.ents) if (o !== e && o.hp > 0 && !ET[o.type].fly && Math.abs(o.y - e.y) < 24) {
+    const dx = e.x + e.w / 2 - (o.x + o.w / 2), gap = (e.w + o.w) / 2 + 8;
+    if (Math.abs(dx) < gap && Math.sign(target) === -Math.sign(dx)) target *= 0.2;
+  }
+  e.vx = lerp(e.vx, target, 1 - Math.exp(-13 * dt));
+  if (!target && e.onG && Math.abs(e.vx) > 0.1) { e.f = Math.sign(e.vx); if (pitAhead(e, Math.abs(e.vx) * dt + 3)) e.vx = 0; e.f = previous; }
+}
+function enemyPatrol(e, dt) {
+  e.patrolPause = Math.max(0, e.patrolPause - dt);
+  const radius = 42 + e.personality * 40, min = Math.max(G.lvl.enemyMinX || 0, e.hx - radius), max = Math.min(G.lvl.w - e.w, e.hx + radius);
+  if (e.x <= min && e.f < 0 || e.x >= max && e.f > 0 || e.hitWall || e.onG && pitAhead(e)) { e.f *= -1; e.patrolPause = 0.3 + e.personality * 0.6; }
+  return e.patrolPause > 0 ? 0 : e.f * e.spd * 0.5;
+}
+function enemyGround(e, dt) { e.vy += GRAV * dt; moveBody(e, dt); }
 function updateEnemies(dt) {
-  // logo depois de renascer na fogueira os monstros levam 1 s para reagir
-  if (G.grace > 0) { G.grace -= dt; for (const e of G.ents) e.t += dt; return; }
+  if (!G.P) return;
+  // Uma cena congela decisões e ataques; ao voltar, o aviso ainda pode ser lido.
+  if (G.lock > 0 || G.P.state === 'dead' || G.grace > 0) { G.grace = Math.max(0, (G.grace || 0) - dt); for (const e of G.ents) { e.t += dt; enemyMotion(e, 'idle'); } return; }
+  G.enemyAttackGap = Math.max(0, (G.enemyAttackGap || 0) - dt);
   const P = G.P, px = P.x + 5, py = P.y + 11;
   for (const e of G.ents) {
     if (e.hp <= 0) continue;
     e.t += dt; e.flash -= dt;
     if (e.poison > 0) { e.poison -= dt; e.pt -= dt; if (e.pt <= 0) { e.pt = 0.5; e.hp -= 3; e.flash = 0.06; part(e.x + e.w / 2, e.y, 0, -20, 0.5, '#8fe37a'); if (e.hp <= 0) { killEnemy(e); continue; } } }
-    const d = ET[e.type], dx = px - (e.x + e.w / 2), dy = py - (e.y + e.h / 2);
+    const d = ET[e.type], dx = px - (e.x + e.w / 2), dy = py - (e.y + e.h / 2), generic = ['crawler', 'flyer', 'spitter', 'brute', 'lanceiro', 'wolf'].includes(e.ai);
     if (Math.abs(dx) > 260) continue;
     if (e.stag > 0) {
-      e.stag -= dt; e.vx *= Math.pow(0.02, dt);
-      if (ET[e.type].fly) { e.x += e.vx * dt; e.y += e.vy * dt; e.vy *= Math.pow(0.05, dt); }
-      else { e.vy += GRAV * dt; moveBody(e, dt); }
-      enemyPatrolBounds(e);
-      if (e.y > (G.lvl.h || WORLD_H) + 60) e.hp = 0;
-      continue;
+      if (generic && !e.interrupted) { enemyRecover(e, 0.4); e.contactHit = true; if (e.ai === 'wolf') { e.st = 'rest'; e.tt = 0.4; } if (e.ai === 'flyer') e.mode = 'tired'; e.interrupted = true; }
+      e.stag -= dt; e.vx *= Math.pow(0.02, dt); enemyMotion(e, 'recover', 0.3, 'hurt');
+      if (d.fly) { e.x += e.vx * dt; e.y += e.vy * dt; e.vy *= Math.pow(0.05, dt); } else enemyGround(e, dt);
+      enemyPatrolBounds(e); if (e.y > (G.lvl.h || WORLD_H) + 60) e.hp = 0; continue;
+    }
+    e.interrupted = false;
+    if (generic) {
+      enemyNotice(e, dx, dy, dt); e.noTouch = true;
+      if (G.lvl.enemyMinX != null && px < G.lvl.enemyMinX && (e.wind > 0 || e.swing > 0)) {
+        enemyRecover(e, 0.4); e.vx = 0;
+        if (e.ai === 'wolf') e.st = 'rest';
+        if (e.ai === 'flyer') e.mode = 'tired';
+      }
     }
     if (e.ai === 'crawler') {
-      e.calm = (e.calm || 0) - dt;
-      const near = e.calm <= 0 && Math.abs(dx) < 110 && Math.abs(dy) < 40;
-      if (near) e.f = Math.sign(dx) || e.f;
-      const ahead = e.f > 0 ? e.x + e.w + 2 : e.x - 2;
-      // tronco caído também conta como beirada: bicho rasteiro não sobe na rampa
-      const ramp = !e.onRamp && G.lvl.ramps.some(r => ahead > Math.min(r.x0, r.x1) - 2 && ahead < Math.max(r.x0, r.x1) + 2);
-      const edge = e.onG && (ramp || pitAhead(e));
-      // no buraco ele dá meia-volta em vez de ficar parado em cima de quem sobe
-      if (edge) { e.f *= -1; if (near) e.calm = 1.2; }
-      e.vx = lerp(e.vx, edge ? 0 : e.f * e.spd * (near ? 2.0 : 1), 0.2);
-      e.vy += GRAV * dt; moveBody(e, dt); if (e.hitWall) e.f *= -1;
+      if (e.swing > 0) {
+        e.swing = Math.max(0, e.swing - dt); e.noTouch = false; enemyMove(e, e.f * e.spd * (e.type === 'tatu' ? 3.1 : 2.3), dt, false); enemyMotion(e, 'attack', 1 - e.swing / e.swingMax);
+        if (!e.swing) enemyRecover(e, 0.6 + e.personality * 0.25);
+      } else if (e.wind > 0) {
+        e.wind = Math.max(0, e.wind - dt); enemyMove(e, 0, dt); enemyMotion(e, 'windup', 1 - e.wind / e.windMax);
+        if (!e.wind) { e.swing = e.swingMax = e.type === 'tatu' ? 0.34 : 0.24; SFX.swing(); }
+      } else if (e.rec > 0) { e.rec = Math.max(0, e.rec - dt); enemyMove(e, 0, dt); enemyMotion(e, 'recover', 1 - e.rec / e.recMax); }
+      else if (e.aware && !e.alertT) {
+        const target = e.lastSeen - (e.x + e.w / 2); e.f = Math.sign(target) || e.f;
+        if (Math.abs(dx) < (e.type === 'tatu' ? 48 : 35) && Math.abs(dy) < 32 && enemyCanAttack(e)) enemyPrepare(e, 0.34 + e.personality * 0.12, e.type === 'tatu' ? 'roll' : 'shove');
+        else { enemyMove(e, Math.abs(target) > 22 ? e.f * e.spd * 1.25 : 0, dt); enemyMotion(e, Math.abs(e.vx) > 3 ? 'move' : 'idle'); }
+      } else { enemyMove(e, e.aware ? 0 : enemyPatrol(e, dt), dt); enemyMotion(e, e.alertT > 0 ? 'alert' : Math.abs(e.vx) > 3 ? 'move' : 'idle', e.alertT > 0 ? 1 - e.alertT / e.alertMax : 0); }
+      enemyGround(e, dt);
     } else if (e.ai === 'flyer') {
-      e.cd -= dt;
-      // voador: avisa (para e pisca), mergulha e depois fica cansado perto do chão — a hora de acertar
       if (e.mode === 'aim') {
-        e.st -= dt; e.wind = 1;
-        if (e.st <= 0) { const L2 = Math.hypot(dx, dy) || 1; e.vx = dx / L2 * 120; e.vy = dy / L2 * 120; e.st = 0.75; e.mode = 'swoop'; e.wind = 0; }
+        e.wind = Math.max(0, e.wind - dt); e.st = e.wind;
+        if (e.wind > e.windMax * 0.5) { e.aimX = px + clamp(P.vx, -80, 80) * 0.12; e.aimY = py; }
+        enemyMotion(e, 'windup', 1 - e.wind / e.windMax);
+        if (!e.wind) { const ax = e.aimX - (e.x + e.w / 2), ay = e.aimY - (e.y + e.h / 2), len = Math.hypot(ax, ay) || 1; e.vx = ax / len * 138; e.vy = ay / len * 138; e.swing = e.swingMax = 0.62; e.mode = 'swoop'; }
       } else if (e.mode === 'swoop') {
-        e.st -= dt; e.x += e.vx * dt; e.y += e.vy * dt;
-        if (e.y + e.h > groundY(e.x + e.w / 2, e.y) - 2) { e.y = groundY(e.x + e.w / 2, e.y) - e.h - 2; e.vy = 0; }
-        if (e.st <= 0) { e.mode = 'tired'; e.st = 0.9; }
+        e.swing = Math.max(0, e.swing - dt); e.st = e.swing; e.noTouch = false; e.x += e.vx * dt; e.y += e.vy * dt;
+        const gy = groundY(e.x + e.w / 2, e.y); if (e.y + e.h > gy - 2) { e.y = gy - e.h - 2; e.vy = 0; }
+        enemyMotion(e, 'attack', 1 - e.swing / e.swingMax); if (!e.swing) { e.mode = 'tired'; enemyRecover(e, 0.85 + e.personality * 0.3); }
       } else if (e.mode === 'tired') {
-        e.st -= dt; e.x += e.vx * 0.15 * dt; e.y += Math.sin(e.t * 6) * 6 * dt;
-        if (e.st <= 0) e.mode = 'home';
+        e.rec = Math.max(0, e.rec - dt); e.st = e.rec; e.vx *= Math.exp(-9 * dt); e.x += e.vx * dt; enemyMotion(e, 'recover', 1 - e.rec / e.recMax); if (!e.rec) e.mode = 'home';
       } else {
-        const tx = e.hx + Math.sin(e.t * 1.3) * 30, ty = e.hy + Math.sin(e.t * 2.1) * 8;
-        e.x += clamp(tx - e.x, -1, 1) * e.spd * dt; e.y += clamp(ty - e.y, -1, 1) * e.spd * dt;
-        if (Math.abs(dx) < 95 && Math.abs(dy) < 90 && e.cd <= 0) { e.mode = 'aim'; e.st = 0.36; e.cd = 2.3; }
+        const tx = e.aware ? clamp(e.lastSeen + Math.sin(e.t * 1.2 + e.personality * 6) * 32, e.hx - 85, e.hx + 85) : e.hx + Math.sin(e.t * 1.2) * 28, ty = e.hy + Math.sin(e.t * 2.1) * 8;
+        const oldX = e.x; e.x += clamp(tx - e.x, -e.spd * dt, e.spd * dt); e.y += clamp(ty - e.y, -e.spd * dt, e.spd * dt); e.vx = (e.x - oldX) / dt; e.f = Math.sign(dx) || e.f;
+        enemyMotion(e, e.alertT > 0 ? 'alert' : 'move', e.alertT > 0 ? 1 - e.alertT / e.alertMax : 0);
+        if (Math.abs(dx) < 120 && Math.abs(dy) < 105 && enemyCanAttack(e)) { enemyPrepare(e, 0.48 + e.personality * 0.14, 'dive'); e.mode = 'aim'; e.aimX = px; e.aimY = py; }
       }
-      e.f = Math.sign(dx) || 1;
     } else if (e.ai === 'spitter') {
-      e.f = Math.sign(dx) || 1;
       if (e.wind > 0) {
-        e.wind -= dt;
-        if (e.wind <= 0) {
-          const T = 0.85; shoot({ team: 'e', x: e.x + e.w / 2, y: e.y + 4, vx: clamp(dx / T, -150, 150), vy: clamp((dy - 0.5 * 400 * T * T) / T, -260, 0), w: 5, h: 5, dmg: e.dmg, kind: 'blob', grav: 400 });
+        e.wind = Math.max(0, e.wind - dt); enemyMove(e, 0, dt);
+        if (e.wind > e.windMax * 0.5) { e.aimX = px + clamp(P.vx, -60, 60) * 0.16; e.aimY = py; }
+        enemyMotion(e, 'windup', 1 - e.wind / e.windMax);
+        if (!e.wind) {
+          const T = clamp(Math.abs(e.aimX - (e.x + e.w / 2)) / 145, 0.45, 0.85), ay = e.aimY - (e.y + 4);
+          shoot({ team: 'e', owner: e, x: e.x + e.w / 2, y: e.y + 4, vx: clamp((e.aimX - (e.x + e.w / 2)) / T, -150, 150), vy: clamp((ay - 0.5 * 400 * T * T) / T, -260, 80), w: 5, h: 5, dmg: e.dmg, kind: 'blob', grav: 400 });
+          e.swing = e.swingMax = 0.16; SFX.swing();
         }
-      } else { e.cd -= dt; if (e.cd <= 0 && Math.abs(dx) < 170 && Math.abs(dy) < 80) { e.wind = 0.42; e.cd = 1.9; } }
-      e.vy += GRAV * dt; e.vx = 0; moveBody(e, dt);
+      } else if (e.swing > 0) { e.swing = Math.max(0, e.swing - dt); enemyMove(e, 0, dt); enemyMotion(e, 'attack', 1 - e.swing / e.swingMax); if (!e.swing) enemyRecover(e, 0.65); }
+      else if (e.rec > 0) { e.rec = Math.max(0, e.rec - dt); enemyMove(e, 0, dt); enemyMotion(e, 'recover', 1 - e.rec / e.recMax); }
+      else if (e.aware && !e.alertT) {
+        e.f = Math.sign(dx) || e.f;
+        if (Math.abs(dx) < 165 && Math.abs(dy) < 65 && enemyCanAttack(e)) { enemyPrepare(e, 0.58 + e.personality * 0.14, 'spit'); e.aimX = px; e.aimY = py; }
+        else { enemyMove(e, Math.abs(dx) < 55 ? -e.f * e.spd : Math.abs(dx) > 125 ? e.f * e.spd * 0.6 : 0, dt); enemyMotion(e, Math.abs(e.vx) > 3 ? 'move' : 'idle'); }
+      } else { enemyMove(e, 0, dt); enemyMotion(e, e.alertT > 0 ? 'alert' : 'idle', e.alertT > 0 ? 1 - e.alertT / e.alertMax : 0); }
+      enemyGround(e, dt);
     } else if (e.ai === 'brute' || e.ai === 'lanceiro') {
       if (e.swing > 0) {
-        e.swing -= dt;
+        e.swing = Math.max(0, e.swing - dt); enemyMove(e, e.attackVariant === 'lunge' ? e.f * e.spd * 1.4 : 0, dt, false); enemyMotion(e, 'attack', 1 - e.swing / e.swingMax);
         const hb = { x: e.f > 0 ? e.x + e.w : e.x - d.reach, y: e.y + 2, w: d.reach, h: e.h - 4 };
-        if (!e.hitDone && overlap(hb, P)) { e.hitDone = hurtPlayer(e.dmg, e.x + e.w / 2); }
-        if (e.swing <= 0) e.rec = 0.6;
-      } else if (e.wind > 0) { e.wind -= dt; if (e.wind <= 0) { e.swing = 0.18; e.hitDone = false; SFX.swing(); } }
-      else if (e.rec > 0) e.rec -= dt;
-      else if (Math.abs(dx) < 130 && Math.abs(dy) < 40) { e.f = Math.sign(dx) || 1; if (Math.abs(dx) < d.reach + 6) { e.wind = e.windMax = d.wind; e.vx = 0; } else e.vx = pitAhead(e) ? 0 : e.f * e.spd; }
-      else e.vx = 0;
-      if (e.wind > 0 || e.swing > 0) e.vx = 0;
-      e.vy += GRAV * dt; moveBody(e, dt);
+        if (!e.hitDone && overlap(hb, P)) { e.hitDone = true; hurtPlayer(e.dmg, e.x + e.w / 2); }
+        if (!e.swing) enemyRecover(e, 0.7 + e.personality * 0.3);
+      } else if (e.wind > 0) {
+        e.wind = Math.max(0, e.wind - dt); enemyMove(e, 0, dt); enemyMotion(e, 'windup', 1 - e.wind / e.windMax);
+        if (!e.wind) { e.swing = e.swingMax = e.attackVariant === 'lunge' ? 0.22 : 0.28; e.hitDone = false; SFX.swing(); }
+      } else if (e.rec > 0) { e.rec = Math.max(0, e.rec - dt); enemyMove(e, 0, dt); enemyMotion(e, 'recover', 1 - e.rec / e.recMax); }
+      else if (e.aware && !e.alertT) {
+        const target = e.lastSeen - (e.x + e.w / 2); e.f = Math.sign(target) || e.f;
+        if (Math.abs(dx) < d.reach + e.w / 2 + 3 && Math.abs(dy) < 38 && enemyCanAttack(e)) enemyPrepare(e, d.wind + e.personality * 0.12, (e.attacks + Math.round(e.personality * 3)) % 2 ? 'lunge' : 'sweep');
+        else { enemyMove(e, Math.abs(target) > d.reach * 0.8 ? e.f * e.spd : 0, dt); enemyMotion(e, Math.abs(e.vx) > 3 ? 'move' : 'idle'); }
+      } else { enemyMove(e, e.aware ? 0 : enemyPatrol(e, dt), dt); enemyMotion(e, e.alertT > 0 ? 'alert' : Math.abs(e.vx) > 3 ? 'move' : 'idle', e.alertT > 0 ? 1 - e.alertT / e.alertMax : 0); }
+      enemyGround(e, dt);
     } else if (e.ai === 'wolf') updateWolf(e, dt, dx, dy);
-    else if (CAVE_AI[e.ai]) CAVE_AI[e.ai](e, dt, dx, dy);
-    enemyPatrolBounds(e);
-    if (overlap(e, P) && !e.noTouch && e.ai !== 'brute' && e.ai !== 'lanceiro' && !(e.ai === 'wolf' && e.st === 'rest')) hurtPlayer(e.dmg, e.x + e.w / 2);
+    else if (typeof CAVE_AI !== 'undefined' && CAVE_AI[e.ai]) CAVE_AI[e.ai](e, dt, dx, dy);
+    e.gait = (e.gait || 0) + Math.abs(e.vx) * dt * 0.24; enemyPatrolBounds(e);
+    if (overlap(e, P) && !e.noTouch && !e.contactHit && e.ai !== 'brute' && e.ai !== 'lanceiro') { e.contactHit = true; hurtPlayer(e.dmg, e.x + e.w / 2); }
     if (e.y > (G.lvl.h || WORLD_H) + 60) e.hp = 0;
   }
   G.ents = G.ents.filter(e => e.hp > 0 || e.keep);
 }
-// buraco à frente: nada firme até 40 px abaixo do pé (desníveis menores o bicho desce andando)
 function pitAhead(e, look = 2) {
   const ax = e.f > 0 ? e.x + e.w + look : e.x - look, foot = e.y + e.h;
   for (let y = foot + 1; y <= foot + 40; y += 2) if (solidAt(ax, y)) return false;
   for (const r of G.lvl.ramps) if (ax > Math.min(r.x0, r.x1) && ax < Math.max(r.x0, r.x1)) return false;
   return true;
 }
-function updateWolf(e, dt, dx) {
-  e.st = e.st || 'run'; e.tt = (e.tt || 0) - dt;
-  if (e.st === 'run') { e.f = Math.sign(dx) || 1; e.vx = e.onG && pitAhead(e) ? 0 : e.f * (e.spd || 85) * (Math.abs(dx) > 200 ? 0.4 : 1); if (Math.abs(dx) < 55 && e.onG) { e.st = 'wind'; e.tt = 0.4; e.vx = 0; } }
-  else if (e.st === 'wind') { e.vx = 0; if (e.tt <= 0 && pitAhead(e, 34)) { e.st = 'rest'; e.tt = 0.6; } else if (e.tt <= 0) { e.st = 'leap'; e.vy = -230; e.vx = e.f * 150; SFX.roar(); } }
-  else if (e.st === 'leap') { if (e.onG && e.vy >= 0) { e.st = 'rest'; e.tt = 0.8; e.vx = 0; G.cam.shake = 2; } }
-  else if (e.st === 'rest') { e.vx = lerp(e.vx, 0, 0.2); if (e.tt <= 0) e.st = 'run'; }
-  e.vy += GRAV * dt; moveBody(e, dt);
+function updateWolf(e, dt, dx, dy = 0) {
+  e.st = e.st || 'run';
+  if (e.st === 'wind') {
+    e.wind = Math.max(0, e.wind - dt); e.tt = e.wind; enemyMove(e, 0, dt); enemyMotion(e, 'windup', 1 - e.wind / e.windMax);
+    if (!e.wind) {
+      if (pitAhead(e, 48)) { e.st = 'rest'; enemyRecover(e, 0.6); }
+      else { e.st = 'leap'; e.swing = e.swingMax = 0.65; e.vy = e.attackVariant === 'short-hop' ? -170 : -225; e.vx = e.f * (e.attackVariant === 'short-hop' ? 120 : 165); SFX.roar(); }
+    }
+  } else if (e.st === 'leap') {
+    e.swing = Math.max(0, e.swing - dt); e.noTouch = false; enemyMotion(e, 'attack', 1 - e.swing / e.swingMax);
+    if (e.onG && e.vy >= 0 || !e.swing) { e.st = 'rest'; enemyRecover(e, 0.85 + e.personality * 0.3); }
+  } else if (e.st === 'rest') {
+    e.rec = Math.max(0, e.rec - dt); e.tt = e.rec; enemyMove(e, 0, dt); enemyMotion(e, 'recover', 1 - e.rec / e.recMax); if (!e.rec) e.st = 'run';
+  } else if (e.aware && !e.alertT) {
+    const target = e.lastSeen - (e.x + e.w / 2); e.f = Math.sign(target) || e.f;
+    if (Math.abs(dx) < 78 && Math.abs(dy) < 42 && e.onG && enemyCanAttack(e)) { e.st = 'wind'; enemyPrepare(e, 0.4 + e.personality * 0.15, Math.abs(dx) < 42 ? 'short-hop' : 'pounce'); e.tt = e.wind; }
+    else { enemyMove(e, Math.abs(target) > 42 ? e.f * e.spd * 0.85 : 0, dt); enemyMotion(e, Math.abs(e.vx) > 3 ? 'move' : 'idle'); }
+  } else { enemyMove(e, e.aware ? 0 : enemyPatrol(e, dt), dt); enemyMotion(e, e.alertT > 0 ? 'alert' : Math.abs(e.vx) > 3 ? 'move' : 'idle', e.alertT > 0 ? 1 - e.alertT / e.alertMax : 0); }
+  enemyGround(e, dt);
 }
+
 function hitEnemy(e, dmg, dir, o = {}) {
   if (e.shell && dir && dir === -e.f) { shellBlock(e); return false; }
   e.hp -= dmg; e.flash = 0.1; SFX.hit();
@@ -636,14 +723,14 @@ function updateCamera(dt) {
 
 // ---------- Desenho do mundo ----------
 function renderWorld() {
-  const L = G.lvl, b = biome(L.biome), cx = Math.round(G.cam.x), t = G.t;
+  const L = G.lvl, b = biome(L.biome), cx = G.cam.x, t = G.t;
   ctx.save(); ctx.translate(0, DY);
   drawBackground(b, cx, t);
   if (L.biome === 'cerrado' && G.save.ev && G.save.ev.boitata) drawSkyBoitata(t);
   // cenário progressivo: o fundo escurece e se corrompe à medida que o guardião se aproxima
   const prog = clamp(cx / Math.max(1, (L.arena ? L.arena.x0 : L.w - W)), 0, 1);
   if (prog > 0) { ctx.globalAlpha = prog * 0.38; rect(ctx, 0, -DY, W, H, tpal(L.biome).corrupt); ctx.globalAlpha = 1; }
-  ctx.globalAlpha = 0.1; rect(ctx, 0, 118, W, 32, b.mist); ctx.globalAlpha = 0.06; rect(ctx, 0, 132, W, 20, b.mist); ctx.globalAlpha = 1;
+  if (!L.cave) drawWorldAtmosphere(L.biome, b, t);
   const sx = G.cam.shake ? rnd(-G.cam.shake, G.cam.shake) : 0, sy = G.cam.shake ? rnd(-G.cam.shake, G.cam.shake) : 0;
   ctx.save(); ctx.translate(-cx + Math.round(sx), Math.round(sy));
   const gp = b.ground;
@@ -669,7 +756,13 @@ function renderWorld() {
   // chão e plataformas
   for (const s of L.solids) { if (s.wall || s.x > cx + W || s.x + s.w < cx) continue; drawSolid(s, gp, cx); }
   const TP = tpal(L.biome);
-  for (const dc of L.decor) if (dc.x > cx - 4 && dc.x < cx + W + 4) rect(ctx, dc.x, dc.y - dc.h, 1, dc.h, dc.c > 0.7 && b.grass ? b.grass : TP.moss[dc.c > 0.35 ? 2 : 1]);
+  ctx.save(); ctx.lineWidth = 0.55; ctx.lineCap = 'round';
+  for (const dc of L.decor) if (dc.x > cx - 4 && dc.x < cx + W + 4) {
+    const sway = Math.sin(t * 1.5 + dc.x * 0.04) * dc.h * 0.22;
+    ctx.strokeStyle = dc.c > 0.7 && b.grass ? b.grass : TP.moss[dc.c > 0.35 ? 2 : 1];
+    ctx.beginPath(); ctx.moveTo(dc.x, dc.y + 0.5); ctx.quadraticCurveTo(dc.x - sway * 0.2, dc.y - dc.h * 0.6, dc.x + sway, dc.y - dc.h); ctx.stroke();
+  }
+  ctx.restore();
   for (const r of L.ramps) if (Math.max(r.x0, r.x1) > cx - 20 && Math.min(r.x0, r.x1) < cx + W + 20) drawRampPiece(r, L.biome);
   for (const st of L.stumps) if (st.x > cx - 30 && st.x < cx + W + 30) drawStumpPiece(st, L.biome);
   for (const th of L.thorns) if (th.x1 > cx && th.x0 < cx + W) drawThornPiece(th, L.biome);
@@ -680,10 +773,13 @@ function renderWorld() {
   // perigos de fundo
   for (const h of G.hazards) if (h.kind !== 'gas') (HZ[h.kind] || h).draw(h);
   // NPCs
+  if (G.P && !G.P.hidden) drawContactShadow(G.P.x + 5, G.P.y + G.P.h, 10);
+  if (G.boss) drawContactShadow(G.boss.x, G.boss.y, 22);
   for (const n of L.npcs) {
     if (n.hidden) continue;
     n.t += 1 / 60;
     const gy = groundY(n.x, n.y0 || 0);
+    drawContactShadow(n.x, gy, 9);
     ctx.save(); ctx.translate(n.x, gy); ctx.scale(n.scale || 1, n.scale || 1);
     drawHuman(ctx, 0, 0, n.f, { kind: n.anim, t: n.t, ph: n.ph || 0 }, n.spec);
     ctx.restore();
@@ -696,7 +792,10 @@ function renderWorld() {
   drawBossFx();
   drawMapinguariFx();
   // jogador
-  if (G.P && !G.P.hidden) drawPlayer(G.P, t);
+  if (G.P && !G.P.hidden) {
+    if (!G.cavePassage) drawPlayer(G.P, t);
+    else drawCavePassagePlayer(G.P, t);
+  }
   drawCaveFront(L, t);
   // projéteis
   for (const p of G.projs) drawProj(p);
@@ -704,9 +803,15 @@ function renderWorld() {
   // água (na frente)
   for (const w of L.water) {
     if (w.x > cx + W || w.x + w.w < cx) continue;
-    ctx.globalAlpha = 0.55; rect(ctx, w.x, w.y, w.w, H - w.y, '#5a3a7a'); ctx.globalAlpha = 0.8;
-    for (let x = Math.max(w.x, cx - 4); x < Math.min(w.x + w.w, cx + W + 4); x += 6) { const o = Math.sin(t * 2 + x * 0.3) * 2; rect(ctx, x + o, w.y + ((x / 6 | 0) % 3), 4, 1, '#d8a8c8'); }
-    ctx.globalAlpha = 1;
+    const water = ctx.createLinearGradient(0, w.y, 0, w.y + 42);
+    water.addColorStop(0, '#9f8ca25c'); water.addColorStop(0.22, '#655577a8'); water.addColorStop(1, '#26243bd9');
+    ctx.fillStyle = water; ctx.fillRect(w.x, w.y, w.w, H - w.y);
+    ctx.save(); ctx.lineWidth = 0.55; ctx.lineCap = 'round';
+    for (let x = Math.max(w.x, cx - 8); x < Math.min(w.x + w.w, cx + W + 8); x += 8) {
+      const o = Math.sin(t * 1.6 + x * 0.13) * 2, yy = w.y + 1 + (Math.floor(x / 8) % 3) * 1.4;
+      ctx.strokeStyle = '#e0d3d28a'; ctx.beginPath(); ctx.moveTo(x + o, yy); ctx.quadraticCurveTo(x + o + 3, yy - 0.7, x + o + 5.5, yy); ctx.stroke();
+    }
+    ctx.restore();
   }
   // capim alto (na frente)
   for (const g of L.grass) drawGrass(g, t, b);
@@ -737,6 +842,27 @@ function renderWorld() {
   if (L.cave) drawCaveDark();
   if (G.flash > 0) { ctx.globalAlpha = Math.min(0.5, G.flash * 4); rect(ctx, 0, 0, W, H, G.flashCol); ctx.globalAlpha = 1; }
   if (G.rain > 0) for (let i = 0; i < 60 * G.rain; i++) { const x = (hash(i) * W + G.t * 40 * (1 + hash(i + 9))) % W, y = (hash(i + 3) * H + G.t * 260 * (1 + hash(i + 5))) % H; rect(ctx, x, y, 1, 4, '#9fc0d8'); }
+}
+function drawWorldAtmosphere(id, b, t) {
+  const light = id === 'cerrado' ? '#ffc67a' : id === 'caatinga' ? '#fff0c8' : id === 'mata' ? '#c4e5df' : id === 'coracao' ? '#7cf0d0' : '#e4e8b1';
+  const img = tcache('atmosphere-' + id, W, H, c => {
+    const sun = c.createRadialGradient(W * 0.64, 75, 2, W * 0.64, 75, W * 0.58);
+    sun.addColorStop(0, light + '28'); sun.addColorStop(0.6, light + '0b'); sun.addColorStop(1, light + '00');
+    c.fillStyle = sun; c.fillRect(0, 0, W, H);
+    const mist = c.createLinearGradient(0, H - 65, 0, H - 27);
+    mist.addColorStop(0, b.mist + '00'); mist.addColorStop(0.65, b.mist + '20'); mist.addColorStop(1, b.mist + '00');
+    c.fillStyle = mist; c.fillRect(0, H - 65, W, 38);
+  });
+  ctx.drawImage(img, Math.sin(t * 0.12) * 1.5 - 1, -DY);
+}
+function drawContactShadow(x, feet, radius) {
+  const gy = groundY(x, feet - 2), height = gy - feet;
+  if (height < -3 || height > 42) return;
+  const k = 1 - Math.max(0, height) / 55;
+  ctx.save(); ctx.translate(x, gy + 0.5); ctx.scale(1, 0.22);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+  g.addColorStop(0, '#08090c70'); g.addColorStop(1, '#08090c00');
+  ctx.globalAlpha = k; ctx.fillStyle = g; ctx.fillRect(-radius, -radius, radius * 2, radius * 2); ctx.restore();
 }
 function drawSolid(s, gp, cx) {
   const b = G.lvl.biome;
@@ -778,10 +904,13 @@ function drawShadeZone(s, b) {
   }
 }
 function drawGrass(g, t, b) {
-  for (let x = g.x; x < g.x + g.w; x += 2) {
-    const h = 10 + hash(x) * 10, sw = Math.sin(t * 2 + x * 0.2) * 1.5 + (G.boss && G.boss.rustle && Math.abs(G.boss.rustle - x) < 20 ? Math.sin(t * 40) * 3 : 0);
-    line(ctx, x, GY, x + sw, GY - h, hash(x + 1) > 0.5 ? (b.grass || '#c8903a') : '#8a5a2a');
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineWidth = 0.65;
+  for (let x = g.x; x < g.x + g.w; x += 2.6) {
+    const h = 8 + hash(x) * 12, sw = Math.sin(t * 1.8 + x * 0.12) * 2.2 + (G.boss && G.boss.rustle && Math.abs(G.boss.rustle - x) < 20 ? Math.sin(t * 25) * 3 : 0);
+    ctx.strokeStyle = hash(x + 1) > 0.5 ? (b.grass || '#c8903a') : '#92703c';
+    ctx.beginPath(); ctx.moveTo(x, GY + 0.5); ctx.quadraticCurveTo(x - sw * 0.3, GY - h * 0.6, x + sw, GY - h); ctx.stroke();
   }
+  ctx.restore();
 }
 function drawEcho(E, t) {
   const seen = G.save.echoes.includes(E.id);
@@ -826,7 +955,7 @@ function drawEngenho(x, gy, t) {
 function drawProj(p) {
   const f = Math.sign(p.vx) || 1;
   if (p.kind === 'dart') { rect(ctx, p.x - 3, p.y, 6, 1, '#d8c8a0'); rect(ctx, p.x + (f > 0 ? 2 : -3), p.y, 1, 1, p.poison ? '#8fe37a' : '#fff'); rect(ctx, p.x - f * 3, p.y - 1, 1, 3, '#c8402e'); }
-  else if (p.kind === 'orb') { ctx.globalAlpha = 0.4; ell(ctx, p.x, p.y, 4, 4, '#8a7ab0'); ctx.globalAlpha = 1; rect(ctx, p.x - 2, p.y - 2, 4, 4, '#c8b8f0'); rect(ctx, p.x - 1, p.y - 1, 2, 2, '#ffe066'); }
+  else if (p.kind === 'orb') { softGlow(ctx, p.x, p.y, 10, 10, '#8a7ab0', 0.5); rect(ctx, p.x - 2, p.y - 2, 4, 4, '#c8b8f0'); rect(ctx, p.x - 1, p.y - 1, 2, 2, '#ffe066'); }
   else if (p.kind === 'arrow' || p.kind === 'javelin') { const L2 = p.kind === 'arrow' ? 9 : 13, a = Math.atan2(p.vy, p.vx), cx = Math.cos(a), cy = Math.sin(a); for (let i = 0; i < L2; i++) rect(ctx, p.x - cx * i, p.y - cy * i, 1, 1, p.kind === 'arrow' ? '#c8a46a' : '#8a6a3a'); rect(ctx, p.x - 1 + cx, p.y - 1 + cy, 2, 2, '#d8d8d0'); rect(ctx, p.x - cx * (L2 - 1), p.y - cy * (L2 - 1) - 1, 1, 2, '#efe8dc'); }
   else if (p.kind === 'drop') { rect(ctx, p.x - 2, p.y - 2, 4, 4, '#9fd0e0'); rect(ctx, p.x - 1, p.y - 2, 1, 1, '#ffffff'); rect(ctx, p.x - 3 - f * 2, p.y, 2, 1, '#9fd0e0'); }
   else if (p.kind === 'seed') { rect(ctx, p.x - 2, p.y - 1, 4, 3, '#a8844a'); rect(ctx, p.x - 1, p.y - 3, 1, 2, '#8fe37a'); rect(ctx, p.x - f * 4, p.y, 2, 1, '#6fd36a'); }
@@ -862,7 +991,7 @@ function drawPlayer(P, t) {
   if (s === 'dash') {
     for (let i = 3; i > 0; i--) drawHuman(ctx, P.x + 5 - P.f * i * 7, P.y + P.h, P.f, a, spec, false, (alpha == null ? 1 : alpha) * (0.24 - i * 0.05));
   }
-  if (P.form === 'espirito' && !G.flags.noGlow) { ctx.globalAlpha = 0.15 + Math.sin(t * 3) * 0.05; ell(ctx, P.x + 5, P.y + P.h - 11, 10, 13, '#8a7ab0'); ctx.globalAlpha = 1; }
+  if (P.form === 'espirito' && !G.flags.noGlow) softGlow(ctx, P.x + 5, P.y + P.h - 11, 21, 27, '#8a7ab0', 0.25 + Math.sin(t * 3) * 0.04);
   drawHuman(ctx, P.x + 5, P.y + P.h, P.f, a, spec, P.state === 'hurt' && P.stT < 0.08, alpha);
   if (P.stun > 0) for (let i = 0; i < 3; i++) rect(ctx, P.x + 5 + Math.cos(t * 8 + i * 2) * 6, P.y - 4 + Math.sin(t * 8 + i * 2) * 2, 1, 1, '#c8f060');
 }
@@ -871,7 +1000,7 @@ function drawPlayer(P, t) {
 function drawHeart(x, gy, t, green) {
   const k = (Math.sin(t * 2) + 1) / 2, cy = gy - 42;
   const glow = green ? '#7af0c0' : '#e0904a', core = green ? ['#1e6a4a', '#3aa070', '#9af0c0'] : ['#5a2010', '#a04a20', '#f0b060'];
-  ctx.globalAlpha = 0.1 + k * 0.08; ell(ctx, x, cy, 34 + k * 4 | 0, 30 + k * 4 | 0, glow); ctx.globalAlpha = 0.16 + k * 0.1; ell(ctx, x, cy, 20, 18, glow); ctx.globalAlpha = 1;
+  softGlow(ctx, x, cy, 59 + k * 4, 54 + k * 4, glow, 0.25 + k * 0.12);
   // raízes: saem do chão, abraçam a semente e se fecham por cima
   const roots = [[-34, 0, -24, -22, -10, -40], [-20, 0, -16, -26, -6, -50], [34, 0, 24, -22, 10, -40], [20, 0, 16, -26, 6, -50], [-6, 0, -12, -18, -12, -30], [6, 0, 12, -18, 12, -30]];
   for (const [a, b, c2, d, e, f2] of roots) { const pts = curve(x + a, gy + b, x + c2, gy + d, x + e, gy + f2, 22); strokePath(ctx, pts, 3, '#3a2a40', '#0a0610'); pts.forEach(([px, py], i) => { if (i % 4 === 2) rect(ctx, px, py - 1, 1, 1, green ? '#5ae0b0' : '#c8803a'); }); }

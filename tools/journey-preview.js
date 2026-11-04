@@ -20,6 +20,8 @@ addEventListener('message', e => {
 });
 addEventListener('DOMContentLoaded', () => {
   const mode = JOURNEY_PREVIEW.mode, s = JOURNEY_PREVIEW.save || newSave();
+  G.exploring = false;
+  const cave = mode === 'cave-entry' || mode === 'cave-exit';
   const [regionalAction, regionalId] = mode.split('-'), regional = COMPANIONS[regionalId];
   const [travelFrom, travelTo] = (JOURNEY_PREVIEW.route || 'amazonia:cerrado').split(':');
   if (!JOURNEY_PREVIEW.save) {
@@ -33,8 +35,8 @@ addEventListener('DOMContentLoaded', () => {
     }
     if (['boss','decision','spare','purify'].includes(mode)) s.journey.witnessedShelter = true;
     if (mode === 'spare' || mode === 'purify') { s.harmony.mapinguari = mode === 'spare' ? 'poupar' : 'purificar'; s.frag = mode === 'purify' ? 1 : 0; }
-    if (regional || mode === 'travel') {
-      const id = regional ? regionalId : travelFrom;
+    if (regional || mode === 'travel' || cave) {
+      const id = cave ? (mode === 'cave-exit' ? 'gruta' : 'cerrado') : regional ? regionalId : travelFrom;
       s.act = id === 'gruta' ? 2 : ACTS.indexOf(id); s.sub = id === 'gruta' ? 'gruta' : null;
       s.forms = ['espirito', ...FORM_ORDER.slice(0, s.act)];
       s.form = regional ? regional.form : s.forms.at(-1);
@@ -47,22 +49,28 @@ addEventListener('DOMContentLoaded', () => {
       }
       if (mode === 'travel') {
         s.ev.grutaIn = 1;
+        if (travelFrom === 'cerrado') { s.ev.boitata = true; s.harmony.capelobo = 'poupar'; }
         for (const [key, c] of Object.entries(COMPANIONS)) if (c.act <= s.act) s.journey.regions[key] = { met: true, helped: true, shared: true, returned: true, choice: c.choices[0].key };
+      }
+      if (cave) {
+        s.journey.regions.cerrado = { met: true, helped: true, shared: true };
+        if (mode === 'cave-exit') s.caveReturn = { x: 430, sub: null, fire: { lvl: 'cerrado', x: 325 } };
       }
     }
   }
   G.save = s;
-  const lvl = regional ? regionalId : mode === 'travel' ? travelFrom : JOURNEY_PREVIEW.save ? homeLevel(s.act) : s.act === 0 ? 'prologo' : 'amazonia';
+  const lvl = cave ? (mode === 'cave-exit' ? 'gruta' : 'cerrado') : regional ? regionalId : mode === 'travel' ? travelFrom : JOURNEY_PREVIEW.save ? homeLevel(s.act) : s.act === 0 ? 'prologo' : 'amazonia';
   loadLevel(lvl); G.flags = {};
   const x = JOURNEY_PREVIEW.save ? (s.fire && s.fire.lvl === lvl ? s.fire.x : 30) : regional ? (regionalAction === 'meet' ? regional.meetX + 1 : regionalAction === 'task' ? regional.taskX - 5 : regional.camp - 4) : mode === 'travel' ? (COMPANIONS[lvl] ? COMPANIONS[lvl].camp : lvl === 'amazonia' ? 440 : 280) : ({ prologo: 40, amazonia: 260, bridge: 319, camp: 437, shelter: 606, boss: 2005, decision: 2040, spare: 440, purify: 440 }[mode] || 30);
-  G.P = makePlayer(x, groundY(x)); G.P.form = s.form; G.P.onG = true;
-  G.cam.x = clamp(x - W / 2, 0, G.lvl.w - W); G.state = 'play';
+  const spawnX = cave ? (mode === 'cave-entry' ? 413 : 51) : regional && regionalAction === 'boss' ? G.lvl.arena.x0 + 48 : x;
+  G.P = makePlayer(spawnX, groundY(spawnX)); G.P.form = s.form; G.P.onG = true;
+  G.cam.x = clamp(spawnX - W / 2, 0, G.lvl.w - W); G.state = 'play';
   $('#title').hidden = true; $('#intro').hidden = true; $('#hud').hidden = false; $('#fade').classList.remove('on');
   $('#stage').tabIndex = 0;
-  for (const t of G.lvl.triggers) if (t.x < x - 10 || mode === 'travel') t.done = true;
+  for (const t of G.lvl.triggers) if (t.x < spawnX - 10 || mode === 'travel') t.done = true;
   updateHudForm(); hud.cache = {};
-  if (mode === 'travel') scene(() => travelFrom === 'cerrado' && travelTo === 'gruta' ? enterGruta() : nextAct());
-  else if (mode === 'boss') startBoss();
+  if (mode === 'travel') scene(nextAct);
+  else if (mode === 'boss' || regional && regionalAction === 'boss') startBoss();
   else if (mode === 'decision') {
     G.boss = makeBoss('mapinguari', G.lvl.arena.x0 + AW - 65);
     G.boss.st = 'down'; G.boss.hp = 0; G.lvl.arena.active = true;

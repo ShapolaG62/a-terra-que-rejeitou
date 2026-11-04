@@ -17,6 +17,9 @@ function game() {
     save() { stack.push(this.globalAlpha); },
     restore() { this.globalAlpha = stack.pop() ?? 1; },
     translate() {}, scale() {},
+    beginPath() {}, fill() {}, stroke() {},
+    ellipse(...a) { assert.ok(a.every(Number.isFinite)); },
+    moveTo(...a) { assert.ok(a.every(Number.isFinite)); }, lineTo(...a) { assert.ok(a.every(Number.isFinite)); },
   };
   const sandbox = vm.createContext({
     ctx, I: { down: {}, pressed: {} },

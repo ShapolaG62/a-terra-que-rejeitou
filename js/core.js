@@ -3,9 +3,25 @@
 const W = 432, H = 243, GY = 150; // Campo de visão 12,5% maior, mantendo a proporção 16:9.
 const DY = H - 180, AW = W;            // DY: céu a mais em cima; AW: largura das arenas dos guardiões (a tela inteira)
 const WORLD_H = 216;                  // Limite de queda independente do tamanho da câmera.
+const RENDER_SCALE = 2;               // Resolução alta para exibir a textura clássica com nitidez.
+function renderContext(canvas, w, h, scale = RENDER_SCALE) {
+  canvas.width = Math.ceil(w * scale); canvas.height = Math.ceil(h * scale); canvas.renderScale = scale;
+  const c = canvas.getContext('2d');
+  c.setTransform(scale, 0, 0, scale, 0, 0);
+  c.imageSmoothingEnabled = false;
+  // Peças e recortes continuam sendo desenhados em unidades do mundo.
+  const nativeDraw = Object.prototype.hasOwnProperty.call(c, 'nativeDrawImage') ? c.nativeDrawImage : c.drawImage.bind(c);
+  c.nativeDrawImage = nativeDraw;
+  c.drawImage = function (source, ...a) {
+    const s = source.renderScale || 1;
+    if (a.length === 2) return nativeDraw(source, a[0], a[1], source.width / s, source.height / s);
+    if (a.length === 8 && s !== 1) for (let i = 0; i < 4; i++) a[i] *= s;
+    return nativeDraw(source, ...a);
+  };
+  return c;
+}
 const cv = document.getElementById('cv');
-let ctx = cv.getContext('2d');
-ctx.imageSmoothingEnabled = false;
+let ctx = renderContext(cv, W, H);
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;

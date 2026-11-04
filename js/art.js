@@ -1,13 +1,49 @@
 'use strict';
 // Arte procedural em pixel: fundos de bioma (parallax) e sprites desenhados por código.
 
-function mk(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.imageSmoothingEnabled = false; return [c, x]; }
-function rect(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
-function ell(c, cx, cy, rx, ry, col) { c.fillStyle = col; for (let dy = -ry; dy <= ry; dy++) { const hw = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2))); c.fillRect(Math.round(cx - hw), Math.round(cy + dy), hw * 2, 1); } }
+function mk(w, h) { const c = document.createElement('canvas'); return [c, renderContext(c, w, h)]; }
+const GLOW_CACHE = new Map();
+function softGlow(c, x, y, rx, ry, col, strength = 1) {
+  if (rx <= 0 || ry <= 0 || strength <= 0) return;
+  let img = GLOW_CACHE.get(col);
+  if (!img) {
+    const [stamp, g] = mk(96, 96);
+    // A luz perde força desde o centro; duas manchas sobrepostas evitam um disco marcado.
+    g.save();
+    try {
+    for (const [cx, cy, r, power] of [[44, 45, 44, 1], [59, 51, 35, 0.25]]) {
+      const falloff = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+      falloff.addColorStop(0, col + 'c0'); falloff.addColorStop(0.22, col + '50');
+      falloff.addColorStop(0.48, col + '1c'); falloff.addColorStop(0.72, col + '06'); falloff.addColorStop(1, col + '00');
+      g.globalAlpha = power; g.fillStyle = falloff; g.fillRect(0, 0, 96, 96);
+    }
+    } finally { g.restore(); }
+    if (GLOW_CACHE.size >= 32) GLOW_CACHE.clear();
+    GLOW_CACHE.set(col, img = stamp);
+  }
+  c.save();
+  try { c.globalAlpha *= strength; c.drawImage(img, x - rx, y - ry, rx * 2, ry * 2); }
+  finally { c.restore(); }
+}
+function rect(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(Math.round(x * 2) / 2, Math.round(y * 2) / 2, Math.round(w * 2) / 2, Math.round(h * 2) / 2); }
+function ell(c, cx, cy, rx, ry, col) {
+  if (rx <= 0 || ry <= 0) return;
+  c.fillStyle = col;
+  for (let y = Math.ceil((cy - ry) * 2) / 2; y < cy + ry; y += 0.5) {
+    const dy = (y + 0.25 - cy) / ry; if (Math.abs(dy) > 1) continue;
+    const hw = rx * Math.sqrt(1 - dy * dy), x0 = Math.round((cx - hw) * 2) / 2, x1 = Math.round((cx + hw) * 2) / 2;
+    c.fillRect(x0, y, Math.max(0.5, x1 - x0), 0.5);
+  }
+}
 function line(c, x0, y0, x1, y1, col, th = 1) {
-  c.fillStyle = col; x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
-  const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1; let e = dx + dy;
-  for (let i = 0; i < 2000; i++) { c.fillRect(x0, y0, th, th); if (x0 === x1 && y0 === y1) break; const e2 = 2 * e; if (e2 >= dy) { e += dy; x0 += sx; } if (e2 <= dx) { e += dx; y0 += sy; } }
+  c.fillStyle = col; x0 = Math.round(x0 * 2); y0 = Math.round(y0 * 2); x1 = Math.round(x1 * 2); y1 = Math.round(y1 * 2);
+  const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let e = dx + dy;
+  for (let i = 0; i < 4000; i++) {
+    c.fillRect(x0 / 2, y0 / 2, Math.max(0.5, Math.round(th * 2) / 2), Math.max(0.5, Math.round(th * 2) / 2));
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = e * 2; if (e2 >= dy) { e += dy; x0 += sx; } if (e2 <= dx) { e += dx; y0 += sy; }
+  }
 }
 const BAYER = [0, 2, 3, 1];
 function dither(c, x, y, w, h, col, d) { c.fillStyle = col; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const px = x + i, py = y + j; if (BAYER[(px & 1) + ((py & 1) << 1)] / 4 < d) c.fillRect(px, py, 1, 1); } }
@@ -212,7 +248,7 @@ function araucaria(c, x, by, h, col) {
 function drawBackground(b, camx, t) {
   ctx.drawImage(b.sky, 0, 0, W, 150, 0, -DY, W, 150 + DY); ctx.drawImage(b.sky, 0, 150, W, H - 150, 0, 150, W, H - 150);
   for (const l of b.layers) {
-    let ox = -Math.floor((camx * l.f + (l.drift ? t * l.drift : 0)) % LW);
+    let ox = -((camx * l.f + (l.drift ? t * l.drift : 0)) % LW);
     if (ox > 0) ox -= LW;
     for (let x = ox; x < W; x += LW) ctx.drawImage(l.c, x, 0);
   }
@@ -280,28 +316,45 @@ function npcSpec(form, over) { return Object.assign({}, NPC_BASE[form] || SPEC[f
 const HPI = Math.PI;
 function humanPose(a, s) {
   const k = a.kind, p = clamp(a.p || 0, 0, 1), t = a.t || 0, wp = s.weapon;
-  const P = { bob: 0, lean: 0, head: 0, crouch: 0, fb: [-2, 0], ff: [2, 0], ab: [0.15, 0.2], af: [0.25, 0.9], wa: HPI - 0.1, slash: null, lie: false, blink: false, puff: false, draw: 0, arrow: false, gourd: false, noWeapon: false, mouth: false };
+  const P = { bob: 0, lean: 0, head: 0, crouch: 0, fb: [-2, 0], ff: [2, 0], ab: [0.15, 0.2], af: [0.25, 0.9], wa: HPI - 0.1, slash: null, lie: false, blink: false, puff: false, draw: 0, arrow: false, gourd: false, noWeapon: false, mouth: false, scaleX: 1, scaleY: 1, rot: 0 };
   const ez = v => v * v * (3 - 2 * v);
+
   if (k === 'idle') {
-    P.bob = Math.sin(t * 2.4) > 0.2 ? 0 : 1; P.ab = [0.12 + Math.sin(t * 2.4) * 0.05, 0.2]; P.blink = (t % 3.3) < 0.13;
+    P.bob = Math.sin(t * 2.4) > 0.2 ? 0 : 1;
+    P.ab = [0.12 + Math.sin(t * 2.4) * 0.05, 0.2];
+    P.blink = (t % 3.3) < 0.13;
+    P.scaleY = 1 + Math.sin(t * 2.4) * 0.02;
+    P.scaleX = 1 - Math.sin(t * 2.4) * 0.01;
     if (wp === 'bow') { P.af = [0.15, 0.4]; P.wa = HPI / 2 + 0.25; }
   } else if (k === 'run' || k === 'walk') {
     const run = k === 'run', amp = run ? 4 : 2.5, lift = run ? 2.5 : 1, s1 = Math.sin(a.ph), c1 = Math.cos(a.ph);
     P.ff = [1 + s1 * amp, Math.max(0, c1) * lift]; P.fb = [-2 - s1 * amp, Math.max(0, -c1) * lift];
-    P.bob = Math.abs(c1) > 0.7 ? 1 : 0; P.lean = run ? 1 : 0;
+    P.bob = Math.abs(c1) > 0.7 ? 1 : 0; P.lean = run ? 1.5 : 0.5;
+    P.rot = run ? Math.sin(a.ph * 2) * 0.05 : 0;
+    P.scaleY = 1 + Math.abs(Math.sin(a.ph)) * 0.05;
+    P.scaleX = 1 - Math.abs(Math.sin(a.ph)) * 0.03;
     P.af = [-s1 * 0.8 + 0.3, 0.9]; P.ab = [s1 * 0.9, 0.7];
     P.wa = wp === 'bow' ? HPI / 2 + 0.4 : wp === 'spear' ? HPI / 2 + 0.12 + s1 * 0.04 : 2.3 + s1 * 0.12;
   } else if (k === 'dash') {
     const drive = 1 - ez(p);
-    P.lean = 2 + drive * 2; P.head = 1; P.ff = [4, 1]; P.fb = [-6, 2];
+    P.lean = 3 + drive * 2; P.head = 1; P.ff = [5, 1]; P.fb = [-7, 2];
+    P.scaleX = 1.25; P.scaleY = 0.8; P.rot = 0.12;
     P.af = [-0.8, 0.5]; P.ab = [-1.3, 0.3]; P.wa = 2.5;
-  } else if (k === 'jump') { P.ff = [3, 4]; P.fb = [-2, 2]; P.af = [2.2, 0.4]; P.ab = [-1.1, 0.3]; P.wa = 2.4; }
-  else if (k === 'fall') { P.ff = [2, 0]; P.fb = [-3, 1]; P.af = [1.8, 0.2]; P.ab = [-1.5, 0.2]; P.wa = 2.0; }
-  else if (k === 'climb') { const s1 = Math.sin(t * 9) * (a.moving ? 1 : 0); P.af = [HPI - 0.2 + s1 * 0.3, 0.2]; P.ab = [HPI - 0.4 - s1 * 0.3, 0.2]; P.ff = [2, 3 + s1 * 2]; P.fb = [-1, 3 - s1 * 2]; P.noWeapon = true; P.lean = 1; }
-  else if (k === 'kneel') { P.crouch = 5; P.ff = [4, 0]; P.fb = [-4, 0]; P.af = [0.4, 0.6]; P.ab = [0.1, 0.2]; P.head = 1; P.wa = 2.2; }
-  else if (k === 'heal') { P.af = [2.6, 2.3]; P.ab = [0.25, 0.3]; P.head = -1; P.gourd = true; P.noWeapon = wp !== 'bow'; P.wa = 0.3; }
-  else if (k === 'hurt') { P.lean = -2; P.head = -1; P.af = [1.9 - p, 0.3]; P.ab = [-1.6, 0.4]; P.ff = [3, 2]; P.fb = [-2, 0]; P.wa = 2.6; }
-  else if (k === 'dead') {
+  } else if (k === 'jump') {
+    P.ff = [3, 4]; P.fb = [-2, 2]; P.af = [2.2, 0.4]; P.ab = [-1.1, 0.3]; P.wa = 2.4;
+    P.scaleX = 0.85; P.scaleY = 1.2; P.rot = -0.05;
+  } else if (k === 'fall') {
+    P.ff = [2, 0]; P.fb = [-3, 1]; P.af = [1.8, 0.2]; P.ab = [-1.5, 0.2]; P.wa = 2.0;
+    P.scaleX = 0.95; P.scaleY = 1.08;
+  } else if (k === 'climb') {
+    const s1 = Math.sin(t * 9) * (a.moving ? 1 : 0); P.af = [HPI - 0.2 + s1 * 0.3, 0.2]; P.ab = [HPI - 0.4 - s1 * 0.3, 0.2]; P.ff = [2, 3 + s1 * 2]; P.fb = [-1, 3 - s1 * 2]; P.noWeapon = true; P.lean = 1;
+  } else if (k === 'kneel') {
+    P.crouch = 5; P.ff = [4, 0]; P.fb = [-4, 0]; P.af = [0.4, 0.6]; P.ab = [0.1, 0.2]; P.head = 1; P.wa = 2.2; P.scaleY = 0.85;
+  } else if (k === 'heal') {
+    P.af = [2.6, 2.3]; P.ab = [0.25, 0.3]; P.head = -1; P.gourd = true; P.noWeapon = wp !== 'bow'; P.wa = 0.3;
+  } else if (k === 'hurt') {
+    P.lean = -2; P.head = -1; P.af = [1.9 - p, 0.3]; P.ab = [-1.6, 0.4]; P.ff = [3, 2]; P.fb = [-2, 0]; P.wa = 2.6; P.scaleX = 1.1; P.scaleY = 0.9;
+  } else if (k === 'dead') {
     if (p < 0.45) { P.crouch = 5 * ez(p / 0.45); P.ff = [4, 0]; P.fb = [-4, 0]; P.af = [0.3, 0.2]; P.ab = [0.1, 0.1]; P.head = 1; P.wa = 1.4; }
     else P.lie = true;
   } else if (k === 'attack') {
@@ -335,11 +388,25 @@ function humanPose(a, s) {
   }
   return P;
 }
+
 const HUMAN_S = 1.45;
 function drawHuman(c, x, y, f, a, s, flash, alpha) {
+  const P = humanPose(a, s), opacity = alpha === undefined ? c.globalAlpha : alpha;
+  c.save();
+  try {
+    c.translate(x, y); c.rotate(P.rot * f); c.scale(P.scaleX, P.scaleY); c.translate(-x, -y);
+    if (a.kind === 'dash') {
+      c.globalAlpha = opacity * 0.3; drawHumanBase(c, x - f * 8, y, f, a, s, flash);
+      c.globalAlpha = opacity * 0.55; drawHumanBase(c, x - f * 4, y, f, a, s, flash);
+    }
+    c.globalAlpha = opacity; drawHumanBase(c, x, y, f, a, s, flash);
+  } finally { c.restore(); }
+}
+function drawHumanBase(c, x, y, f, a, s, flash, alpha) {
   const R = [];
-  const A = (dx, dy, w, h, col) => { const X = Math.round(dx * HUMAN_S), Y = Math.round(dy * HUMAN_S); R.push([X, Y, Math.max(1, Math.round((dx + w) * HUMAN_S) - X), Math.max(1, Math.round((dy + h) * HUMAN_S) - Y), col]); };
-  const seg = (x0, y0, x1, y1, col, th) => { const n = Math.max(1, Math.round(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)))); for (let i = 0; i <= n; i++) A(Math.round(x0 + (x1 - x0) * i / n), Math.round(y0 + (y1 - y0) * i / n), th, th, col); };
+  const snap = v => Math.round(v * 2) / 2;
+  const A = (dx, dy, w, h, col) => { const X = snap(dx * HUMAN_S), Y = snap(dy * HUMAN_S); R.push([X, Y, Math.max(0.5, snap((dx + w) * HUMAN_S) - X), Math.max(0.5, snap((dy + h) * HUMAN_S) - Y), col]); };
+  const seg = (x0, y0, x1, y1, col, th) => { const n = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 2)); for (let i = 0; i <= n; i++) A(snap(x0 + (x1 - x0) * i / n), snap(y0 + (y1 - y0) * i / n), th, th, col); };
   const limb = (x0, y0, x1, y1, t0, t1, col, lit, drk) => {
     const L = Math.hypot(x1 - x0, y1 - y0) || 1, n = Math.max(2, Math.ceil(L * 2)), nx = -(y1 - y0) / L, ny = (x1 - x0) / L;
     for (let i = 0; i <= n; i++) { const k = i / n, th = t0 + (t1 - t0) * k; A(x0 + (x1 - x0) * k - th / 2, y0 + (y1 - y0) * k - th / 2, th, th, col); }
@@ -560,8 +627,8 @@ function drawHuman(c, x, y, f, a, s, flash, alpha) {
   }
   if (alpha !== undefined) c.globalAlpha = alpha;
   c.fillStyle = s.outline || '#120a08';
-  for (const q of R) { const sx = f > 0 ? x + q[0] : x - q[0] - q[2]; c.fillRect(Math.round(sx) - 1, Math.round(y + q[1]) - 1, q[2] + 2, q[3] + 2); }
-  for (const q of R) { const sx = f > 0 ? x + q[0] : x - q[0] - q[2]; c.fillStyle = flash ? '#ffffff' : q[4]; c.fillRect(Math.round(sx), Math.round(y + q[1]), q[2], q[3]); }
+  for (const q of R) { const sx = f > 0 ? x + q[0] : x - q[0] - q[2]; c.fillRect(snap(sx) - 0.5, snap(y + q[1]) - 0.5, q[2] + 1, q[3] + 1); }
+  for (const q of R) { const sx = f > 0 ? x + q[0] : x - q[0] - q[2]; c.fillStyle = flash ? '#ffffff' : q[4]; c.fillRect(snap(sx), snap(y + q[1]), q[2], q[3]); }
   if (slash) drawSlash(c, x, y, f, Object.assign({}, slash, { r: slash.r && slash.r * HUMAN_S, len: slash.len && slash.len * HUMAN_S }), [shF[0] * HUMAN_S, shF[1] * HUMAN_S], tip * HUMAN_S, s);
   if (alpha !== undefined) c.globalAlpha = 1;
 }
@@ -600,43 +667,80 @@ const SHADE = '#0d0a10', SHADE2 = '#1c1622';
 function drawEnemy(c, e, x, y, t, eye) {
   if (drawFauna(c, e, x, y, t)) return;
   if (drawCaveEnemy(c, e, x, y, t)) return;
-  const f = e.f, P = pen(c, x, y, f, e.flash > 0), k = e.type;
+  const f = e.f, k = e.type, M = faunaMotion(e, t), snap = v => Math.round(v * 2) / 2;
+  const P = (dx, dy, w, h, col) => { const breathe = dy < -4 ? M.breath - M.scan * 0.5 : 0; c.fillStyle = e.flash > 0 ? '#fff' : col; c.fillRect(snap(f > 0 ? x + dx : x - dx - w), snap(y + dy + breathe), Math.max(0.5, snap(w)), Math.max(0.5, snap(h))); };
+  // Olhar sob a sobrancelha e dentes claros continuam legíveis no tamanho real do jogo.
+  const glare = (ex, ey, w = 2) => {
+    P(ex - 0.5, ey - 0.5, w + 1, 2, '#08060b'); P(ex, ey, w, 1, eye);
+    P(ex - 1, ey - 1.5, 2, 0.5, '#744557'); P(ex + 1, ey - 1, w, 0.5, '#402433');
+    P(ex + w - 0.5, ey, 0.5, 0.5, '#ffe1b5');
+  };
+  const snarl = (mx, my, w, gape = 1) => {
+    const h = 1.5 + gape;
+    P(mx, my, w, h, '#050309'); P(mx + 0.5, my + h - 0.5, w - 1, 0.5, '#87313f');
+    for (let i = 0; i < w - 1; i += 2) P(mx + i + 0.5, my, 0.5, i === 0 ? Math.min(h, 2) : 1, '#e8d9b9');
+    P(mx + w - 1.5, my + h - 1, 0.5, 1, '#f6e7c8');
+  };
   if (k === 'crawler') {
-    const lg = Math.sin(t * 14) > 0 ? 1 : 0;
-    P(-7, -8, 14, 6, SHADE); P(-5, -10, 9, 3, SHADE); P(4, -7, 4, 4, SHADE2);
-    P(-6, -2, 1, 2 + lg, SHADE); P(-2, -2, 1, 2 - lg + 1, SHADE); P(2, -2, 1, 2 + lg, SHADE); P(5, -2, 1, 2 - lg + 1, SHADE);
-    P(6, -6, 1, 1, eye); P(4, -6, 1, 1, eye);
+    const lg = M.moving ? Math.sin(M.stride) * 1.5 : 0, lean = -M.prep * 2 + M.hit * 3, crouch = M.prep * 1.5 + M.settle;
+    P(-7 + lean * 0.3, -8 + crouch, 14, 6, SHADE); P(-5 + lean, -10 + crouch, 9, 3, SHADE); P(4 + lean, -7 + crouch, 4, 4, SHADE2);
+    P(-6 + lg, -2, 1, 2, SHADE); P(-2 - lg, -2 - Math.max(0, lg), 1, 2 + Math.max(0, lg), SHADE); P(2 + lg, -2, 1, 2, SHADE); P(5 - lg, -2 - Math.max(0, -lg), 1, 2 + Math.max(0, -lg), SHADE);
+    for (let i = 0; i < 4; i++) { P(-6 + i * 3 + lean * 0.3, -10 + crouch - i % 2, 1.5, 3, SHADE2); P(-7 + i * 3 + lean * 0.3, -11 + crouch - i % 2, 1, 1, '#654357'); }
+    glare(5 + lean, -6.5 + crouch - M.scan, 2);
+    snarl(5 + lean, -4.5 + crouch, 4, M.prep + M.hit);
+    for (const foot of [-6 + lg, -2 - lg, 2 + lg, 5 - lg]) P(foot, -0.5, 2, 0.5, '#bdad95');
   } else if (k === 'flyer') {
-    const w = Math.sin(t * (e.mode === 'tired' ? 8 : 18)) > 0, warn = e.wind > 0 && Math.sin(t * 40) > 0;
+    const flap = M.phase === 'windup' ? -8 * M.prep : M.phase === 'attack' ? 2 + M.follow * 3 : Math.sin(Math.floor(t * 24) / 12 * HPI) * (M.settle > 0 ? 3 : 6), span = M.phase === 'attack' ? 8 - M.hit * 3 : 12, warn = M.prep > 0.65;
     P(-4, -9, 8, 7, SHADE); P(-3, -11, 2, 2, SHADE); P(2, -11, 2, 2, SHADE);
-    P(1, -7, 2, 1, warn ? '#ffffff' : eye); P(-2, -7, 1, 1, warn ? '#ffffff' : eye);
-    if (w) { P(-11, -11, 7, 2, SHADE); P(4, -11, 7, 2, SHADE); P(-12, -9, 2, 2, SHADE); P(10, -9, 2, 2, SHADE); }
-    else { P(-10, -6, 6, 2, SHADE); P(4, -6, 6, 2, SHADE); P(-11, -4, 2, 2, SHADE); P(9, -4, 2, 2, SHADE); }
+    glare(1, -7, 2); P(-2, -7, 1, 1, warn ? '#ffffff' : eye); snarl(-1, -5, 4, M.prep + M.hit);
+    for (const side of [-1, 1]) {
+      line(c, x + f * side * 3, y - 8, x + f * side * 7, y - 7 + flap * 0.5, SHADE, 2);
+      line(c, x + f * side * 7, y - 7 + flap * 0.5, x + f * side * span, y - 6 + flap, SHADE2, 1.5);
+      for (let i = 0; i < 3; i++) P(side * (span - i * 2) - 0.5, -6 + flap + i * 0.5, 1, 2, '#503345');
+    }
   } else if (k === 'spitter') {
-    const open = e.wind > 0;
-    P(-5, -14, 10, 14, SHADE); P(-6, -4, 12, 4, SHADE2); P(-4, -16, 3, 2, SHADE); P(1, -17, 3, 3, SHADE);
-    P(1, -11, 2, 1, eye); P(-2, -11, 1, 1, eye);
-    if (open) { P(2, -8, 4, 3, '#000'); P(3, -7, 2, 1, eye); }
+    const lean = -M.prep * 2 + M.hit * 4 + (M.moving ? Math.sin(M.stride) * 0.8 : 0), bob = M.breath - M.scan;
+    P(-5, -14 + bob, 10, 14 - bob, SHADE); P(-6, -4, 12, 4, SHADE2); P(-4 + lean, -16 + bob, 3, 2, SHADE); P(1 + lean, -17 + bob, 3, 3, SHADE);
+    glare(1 + lean, -11 + bob, 2); P(-2 + lean, -11 + bob, 1, 1, eye);
+    P(-6, -14 + bob, 2, 4, '#342235'); P(-7, -16 + bob, 1, 3, '#604051');
+    snarl(1 + lean, -8 + bob, 5, M.prep * 2 + M.hit);
+    if (M.prep || M.hit) { P(2 + lean, -8 + bob, 4, 1 + M.prep * 2 + M.hit, '#000'); P(3 + lean, -7 + bob, 2, 1, eye); }
   } else if (k === 'brute') {
-    const sw = e.wind > 0 ? -4 : e.swing > 0 ? 8 : 0;
-    P(-8, -20, 15, 16, SHADE); P(-6, -24, 10, 6, SHADE); P(-7, -4, 4, 4, SHADE); P(2, -4, 4, 4, SHADE);
-    P(2, -21, 2, 1, eye); P(-1, -21, 1, 1, eye);
-    P(5, -18 + (sw < 0 ? -6 : 0), 4, 10, SHADE2); P(7 + Math.max(0, sw), -10 + (sw < 0 ? -10 : 0), 5, 4, SHADE);
-    if (e.swing > 0) enemySlash(c, x, y - 12, f, 16);
+    const sw = -4 * M.prep + 8 * M.hit + M.settle * 2, lift = -8 * M.prep + M.follow * 2, stride = M.moving ? Math.sin(M.stride) * 2 : 0;
+    P(-8, -20, 15, 16, SHADE); P(-6, -24, 10, 6, SHADE); P(-7 + stride, -4 - Math.max(0, stride), 4, 4, SHADE); P(2 - stride, -4 - Math.max(0, -stride), 4, 4, SHADE);
+    P(-8, -19, 4, 8, SHADE2); P(3, -20, 5, 7, SHADE2);
+    for (const dx of [-8, -5, 5]) { P(dx, -22, 2, 4, '#342232'); P(dx + 0.5, -24, 1, 2, '#7b5262'); }
+    glare(1, -21, 3); P(-1, -21, 1, 1, eye); snarl(-1, -18.5, 6, 1 + M.prep + M.hit);
+    P(5 - M.prep, -18 + lift * 0.5, 4, 10 - lift * 0.3, SHADE2); P(7 + sw, -10 + lift, 5, 4, SHADE);
+    for (let i = 0; i < 3; i++) { P(9 + sw + i, -7 + lift, 0.5, 2, '#d6c5a8'); P(-4 + i * 2, -12 + i, 0.5, 2, '#6d314f'); }
+    if (M.hit > 0.2) for (let i = 0; i < 3; i++) line(c, x + f * (10 + sw - i), y - 13 + i * 2, x + f * (17 + sw - i), y - 9 + i * 2, '#c8402e', 0.5);
   } else if (k === 'lanceiro') {
     // sombra alta com lança: recua a lança no aviso e estoca no ataque
-    const step = Math.abs(e.vx) > 4 && Math.sin(t * 12) > 0 ? 1 : 0, back = e.wind > 0 ? -6 : 0, thr = e.swing > 0 ? 12 : 0;
+    const step = M.moving ? Math.sin(M.stride) * 1.5 : 0, back = -6 * M.prep, thr = 12 * M.hit + M.settle * 3;
     P(-4, -22, 8, 16, SHADE); P(-3, -26, 6, 5, SHADE); P(-4, -6, 3, 6 - step, SHADE); P(1, -6, 3, 5 + step, SHADE);
-    P(1, -24, 2, 1, eye); P(-1, -24, 1, 1, eye);
+    P(-4, -25, 1, 5, '#4d2d40'); P(2, -27, 2, 2, '#604051');
+    glare(0, -24, 2); snarl(-1, -22, 4, M.prep);
     P(-10 + back + thr, -15, 30, 1, '#2a2230'); P(19 + back + thr, -16, 3, 3, eye);
-    P(2 + Math.round((back + thr) / 2), -16, 4, 3, SHADE2);
-    if (e.swing > 0) { c.globalAlpha = 0.6; P(22 + thr, -17, 10, 1, '#8a2a2a'); P(22 + thr, -14, 8, 1, '#8a2a2a'); c.globalAlpha = 1; }
+    P(20 + back + thr, -15, 4, 1, '#f1d8b3'); P(18 + back + thr, -17, 1, 5, '#876379');
+    P(2 + (back + thr) / 2, -16 - M.prep, 4, 3, SHADE2);
+    if (M.hit > 0.2) { P(22 + thr, -17, 5 + M.hit * 5, 0.5, '#8a2a2a'); P(22 + thr, -14, 3 + M.hit * 5, 0.5, '#8a2a2a'); }
   } else if (k === 'wolf') { // guardião menor (prólogo)
-    const run = Math.sin(t * 16) > 0 ? 1 : 0;
-    P(-12, -12, 20, 8, SHADE); P(6, -15, 7, 7, SHADE); P(12, -12, 4, 3, SHADE); P(-15, -14, 4, 2, SHADE); P(-17, -16, 3, 2, SHADE);
-    P(-10, -4, 2, 4 - run, SHADE); P(-6, -4, 2, 3 + run, SHADE); P(2, -4, 2, 4 - run, SHADE); P(5, -4, 2, 3 + run, SHADE);
-    P(10, -13, 2, 1, eye); P(7, -16, 1, 2, SHADE); P(10, -17, 1, 2, SHADE);
-    for (let i = 0; i < 4; i++) P(-12 + i * 5, -14 - (i % 2), 2, 2, SHADE2);
+    const run = M.moving ? Math.sin(M.stride) * 2 : 0, crouch = M.prep * 3 + M.settle * 2, reach = M.hit * 4;
+    P(-12, -12 + crouch, 20, 8, SHADE); P(-2, -15 + crouch, 10, 10, SHADE2);
+    P(0, -14 + crouch, 5, 5, '#352333'); P(5, -12 + crouch, 3, 7, '#241621');
+    P(6 + reach, -15 + crouch, 7, 7, SHADE); P(12 + reach, -12 + crouch, 4, 3, SHADE);
+    P(7 + reach, -14 + crouch, 4, 3, '#392632'); P(11 + reach, -11.5 + crouch, 5, 1, '#593743');
+    P(15.5 + reach, -12 + crouch, 1, 1.5, '#050309');
+    P(-15, -14 + crouch - M.prep * 2, 4, 2, SHADE); P(-17, -16 + crouch - M.prep * 3, 3, 2, SHADE);
+    P(-10 + run - reach, -4, 2, 4 - Math.max(0, run), SHADE); P(-6 - run - reach, -4, 2, 3 + Math.max(0, run), SHADE); P(2 + run + reach, -4, 2, 4 - Math.max(0, -run), SHADE); P(5 - run + reach, -4, 2, 3 + Math.max(0, -run), SHADE);
+    // Crina eriçada, orelhas angulosas e mandíbula exposta mesmo no repouso.
+    P(6 + reach, -18 + crouch, 3, 4, SHADE); P(6.5 + reach, -19 + crouch, 1, 2, '#704557');
+    P(10 + reach, -18 + crouch, 2, 3, SHADE); P(10.5 + reach, -19 + crouch, 0.5, 2, '#704557');
+    for (let i = 0; i < 6; i++) { const sx = -11 + i * 3, sy = -14 + crouch - (i % 3); P(sx, sy, 2, 3, SHADE2); P(sx - 1, sy - 2, 1, 3, '#503345'); P(sx - 1, sy - 2, 1, 0.5, '#9c6572'); }
+    glare(9 + reach, -13.5 + crouch, 2.5); snarl(10.5 + reach, -10.5 + crouch, 5, M.prep + M.hit * 1.5);
+    P(12 + reach, -10.5 + crouch, 1, 2.5, '#f6e7c8');
+    for (const foot of [-10 + run - reach, -6 - run - reach, 2 + run + reach, 5 - run + reach]) { P(foot, -0.5, 3, 0.5, '#d6c5a8'); P(foot + 1, -1, 0.5, 1, '#ede0c2'); }
+    P(-4, -10 + crouch, 3, 0.5, '#72364f'); P(-3, -9.5 + crouch, 1, 2, '#4f2940');
   }
 }
 
@@ -648,7 +752,7 @@ function enemySlash(c, x, y, f, r) {
 // Fogueira de histórias (ponto de descanso)
 function drawFire(c, x, y, t, lit) {
   // luz no chão (só acesa), roda de pedras, lenha cruzada, chama em camadas, fagulhas e fumaça
-  if (lit) { const k = 0.16 + Math.sin(t * 7) * 0.03 + Math.sin(t * 13) * 0.02; c.globalAlpha = k; ell(c, x, y - 8, 28, 18, '#ffb050'); c.globalAlpha = k * 1.4; ell(c, x, y - 1, 20, 3, '#ffc070'); c.globalAlpha = 1; }
+  if (lit) { const k = 0.3 + Math.sin(t * 7) * 0.03 + Math.sin(t * 13) * 0.02; softGlow(c, x, y - 10, 46, 36, '#ffb050', k); softGlow(c, x, y - 1, 29, 6, '#ffc070', k * 0.8); }
   const stones = [[-10, 0], [-7, 1], [-3, 1], [2, 1], [6, 1], [9, 0]];
   for (const [sx, sy] of stones) { rect(c, x + sx - 2, y - 3 + sy, 4, 3, '#120a06'); rect(c, x + sx - 1, y - 2 + sy, 3, 2, '#6a6a62'); rect(c, x + sx - 1, y - 2 + sy, 2, 1, '#8a8a80'); }
   line(c, x - 7, y - 1, x + 5, y - 5, '#120a06', 3); line(c, x - 6, y - 2, x + 4, y - 5, '#6a4428', 2);
@@ -670,7 +774,7 @@ function drawFire(c, x, y, t, lit) {
 // chama-espírito (memória perdida, eco): gota de luz que tremula, com fagulhas girando em volta
 function drawSparkle(c, x, y, t, col) {
   const a0 = c.globalAlpha, k = (Math.sin(t * 3) + 1) / 2, sway = Math.sin(t * 7) * 1.2;
-  c.globalAlpha = a0 * (0.14 + k * 0.1); ell(c, x, y - 2, 6 + k * 2 | 0, 8 + k * 2 | 0, col);
+  softGlow(c, x, y - 2, 13 + k * 2, 17 + k * 2, col, 0.3 + k * 0.1);
   const rows = [1, 1, 2, 2, 3, 3, 4, 4, 4, 3];
   c.globalAlpha = a0 * 0.9;
   rows.forEach((w, i) => { const ox = Math.round(sway * (1 - i / rows.length)) - (w >> 1); rect(c, x + ox, y - 8 + i, w, 1, col); });

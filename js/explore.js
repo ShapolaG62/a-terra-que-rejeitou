@@ -14,17 +14,23 @@ updatePlayer = dt => {
 const exploreClear = clearSave;
 clearSave = () => { if (!G.exploring) exploreClear(); };
 async function explorationMenu() {
-  const places = ['prologo', 'amazonia', 'cerrado', 'gruta', 'pantanal', 'caatinga', 'mata', 'coracao'];
+  const places = ['prologo', 'amazonia', 'cerrado', 'pantanal', 'caatinga', 'mata', 'coracao'];
   const a = await menu('<h2>Exploração temporária</h2><p>Sem dano. Esta exploração não grava progresso.</p><div class="btns">' + places.map(id => `<button class="btn" data-act="${id}">${ROTA_NOME[id]}</button>`).join('') + '<button class="btn" data-act="off">Desligar e restaurar progresso salvo</button><button class="btn" data-act="back">Voltar</button></div>');
   if (a === 'off') { G.exploring = false; G.save = loadSave() || newSave(); await enterAct(G.save.act, { skipCard: true }); return; }
   if (!places.includes(a)) return;
   G.save = JSON.parse(JSON.stringify(G.save));
-  G.save.act = a === 'gruta' ? 2 : ACTS.indexOf(a); G.save.sub = a === 'gruta' ? 'gruta' : null;
+  G.save.act = ACTS.indexOf(a); G.save.sub = null; G.save.caveReturn = null;
   G.save.forms = ['espirito', ...FORM_ORDER]; G.save.form = 'semente';
+  // Escolher uma fase permite testar seu guardião novamente só nesta cópia temporária.
+  const boss = a === 'amazonia' ? 'mapinguari' : COMPANIONS[a] && COMPANIONS[a].boss;
+  if (boss) {
+    delete G.save.harmony[boss]; delete G.save.seen[boss];
+    if (a === 'amazonia') { journeyState().returned = false; journeyState().stayAtMargin = false; }
+    else companionState(a).returned = false;
+  }
   loadLevel(a); G.flags = { final: a === 'coracao' }; G.auto = 0; G.camTarget = null;
   G.P = makePlayer(G.lvl.start, groundY(G.lvl.start)); G.P.form = 'semente';
   G.cam.x = 0; G.cam.shake = 0; G.state = 'play'; G.trans = null;
   for (const t of G.lvl.triggers) t.done = true;
-  if (G.lvl.arena) G.lvl.arena.cleared = true;
   hud.cache = {}; updateHudForm(); showToast('Exploração temporária', ROTA_NOME[a] + ' · sem dano · progresso não salvo', 4);
 }

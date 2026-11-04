@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fauna viva — prévia de combate</title>
+<style>
+  :root { color-scheme:dark; font:14px/1.5 system-ui,sans-serif; color:#e9dfc5; background:#0c1411; }
+  * { box-sizing:border-box; } body { margin:0; padding:24px; } main { max-width:1200px; margin:auto; }
+  h1 { margin:0; font:30px Georgia,serif; } p { color:#bac4ae; margin:7px 0 18px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:20px; } a { color:#d7bc82; }
+  .controls { display:flex; flex-wrap:wrap; gap:9px; align-items:center; margin:12px 0; }
+  label { display:flex; gap:7px; align-items:center; }
+  button,select { font:inherit; color:inherit; border:1px solid #526146; border-radius:6px; background:#1b2a20; padding:8px 12px; }
+  button { cursor:pointer; } button:hover,button:focus-visible { background:#334330; outline:1px solid #ceaf70; }
+  iframe { width:100%; height:clamp(360px,65vh,740px); border:1px solid #506047; border-radius:10px; background:#090c0c; }
+  #status { color:#c4ccba; min-height:24px; } #errors { color:#ffb99b; white-space:pre-wrap; }
+  .note { font-size:12px; } @media(max-width:650px) { body { padding:12px; } header { display:block; } }
+</style>
+</head>
+<body><main>
+<header><div><h1>Fauna viva</h1><p>Veja os detalhes das criaturas ou teste seus golpes em combate.</p></div><a href="../index.html">Abrir o jogo ↗</a></header>
+<div class="controls">
+  <label>Mob <select id="mob">
+    <option value="tatu">Tatu</option><option value="capivara">Capivara</option><option value="lobo">Lobo-guará</option>
+    <option value="jaguatirica">Jaguatirica</option><option value="tamandua">Tamanduá</option><option value="queixada">Queixada</option>
+    <option value="cobra">Cobra</option><option value="urubu">Urubu</option><option value="lacraia">Lacraia</option>
+    <option value="morcego">Morcego</option><option value="sapo">Sapo-pedra</option><option value="besouro">Besouro de cristal</option>
+    <option value="wolf">Lobo do prólogo</option><option value="crawler">Sombra rastejante</option><option value="flyer">Sombra alada</option>
+    <option value="spitter">Sombra cuspidora</option><option value="brute">Sombra bruta</option><option value="lanceiro">Lanceiro</option>
+    <option value="boss-lobo">Guardião lobo (prólogo)</option><option value="boitata">Boitatá</option>
+  </select></label>
+  <label>Ambiente <select id="biome"><option value="cerrado">Cerrado</option><option value="amazonia">Amazônia</option><option value="pantanal">Pantanal</option><option value="caatinga">Caatinga</option><option value="mata">Mata Atlântica</option><option value="gruta">Gruta</option></select></label>
+  <label>Encontro <select id="encounter"><option value="appearance" selected>Ver aparência</option><option value="single">Um mob</option><option value="group">Grupo de três</option><option value="patrol">Patrulha à distância</option></select></label>
+</div>
+<div class="controls"><button id="reset">Reiniciar encontro</button><button id="pause">Pausar movimentos</button><label><input type="checkbox" id="immortal" checked>Sem dano nesta prévia</label></div>
+<iframe id="game" title="Prévia jogável dos mobs e iluminação" allow="autoplay; gamepad"></iframe>
+<div id="status" role="status">Carregando…</div><div id="errors" role="alert"></div>
+<p class="note">Escolha Ver aparência para observar a criatura de perto. Para jogar: A/D anda, W pula, J ataca, K atira e Shift dá dash. Seu progresso fica preservado.</p>
+</main><script>
+'use strict';
+const frame = document.getElementById('game'), status = document.getElementById('status');
+const caveTypes = ['lacraia','morcego','sapo','besouro','boitata'];
+const config = () => ({ type: document.getElementById('mob').value, biome: document.getElementById('biome').value, encounter: document.getElementById('encounter').value, immortal: document.getElementById('immortal').checked });
+const send = (action, data = {}) => frame.contentWindow.postMessage({ mobPreview: action, ...data }, location.origin);
+let paused = false;
+async function openPreview() {
+  const html = await (await fetch('../index.html')).text(), base = new URL('../', location.href).href;
+  frame.srcdoc = html.replace('<head>', '<head><base href="' + base + '"><script type="application/json" id="mobPreviewConfig">' + JSON.stringify(config()) + '<\/script>')
+    .replace('<script src="js/story.js"><\/script>', '<script src="tools/mobs-preview.js"><\/script><script src="js/story.js"><\/script>');
+}
+function reset() { document.getElementById('errors').textContent = ''; paused = false; document.getElementById('pause').textContent = 'Pausar movimentos'; send('reset', { config: config() }); }
+document.getElementById('reset').onclick = reset;
+document.getElementById('mob').onchange = e => { if (caveTypes.includes(e.target.value)) document.getElementById('biome').value = 'gruta'; else if (document.getElementById('biome').value === 'gruta') document.getElementById('biome').value = 'amazonia'; reset(); };
+document.getElementById('biome').onchange = reset; document.getElementById('encounter').onchange = reset;
+document.getElementById('immortal').onchange = () => send('immortal', { value: document.getElementById('immortal').checked });
+document.getElementById('pause').onclick = e => { paused = !paused; e.target.textContent = paused ? 'Retomar movimentos' : 'Pausar movimentos'; send('pause', { value: paused }); };
+addEventListener('message', e => {
+  if (e.source !== frame.contentWindow || e.origin !== location.origin) return;
+  if (e.data.mobPreview === 'status') status.textContent = e.data.text;
+  if (e.data.mobPreview === 'error') document.getElementById('errors').textContent += e.data.text + '\n';
+});
+openPreview().catch(e => { document.getElementById('errors').textContent = e.message; });
+</script></body></html>

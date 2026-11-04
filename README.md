@@ -1,7 +1,7 @@
 # A Terra que Rejeitou
 
 Soulslike de plataforma 2D em pixel art, feito em HTML, CSS e JavaScript puro (sem bibliotecas nem engine).
-Um espírito sem forma atravessa os biomas do Brasil — Amazônia, Cerrado, Gruta dos Antigos, Pantanal, Caatinga e
+Um espírito sem forma atravessa os biomas do Brasil — Amazônia, Cerrado, Pantanal, Caatinga e
 Mata Atlântica — enfrentando guardiões corrompidos das lendas: Mapinguari, Capelobo, Boitatá, Pai do Mato, Labatut e Corpo-seco.
 
 ## Como jogar
@@ -26,7 +26,19 @@ Vento, água próxima e pássaros espaçados acompanham esses trechos; a música
 
 Os encontros continuam no Cerrado com Cecília e o marco da trilha, no Pantanal com Bento e uma canoa que volta à água, na Caatinga com Rosa e uma sombra que pode ser ampliada, e na Mata Atlântica com Celina e uma semente que cresce durante o jogo. As conversas deixam lembranças sem bônus de combate. Há reencontros após Capelobo, Pai do Mato e Labatut, com reações às decisões e saídas para a próxima região. A muda de Celina e os outros gestos são lembrados no coração da mata.
 
-As cutscenes terminam com a posição e a passada do personagem alinhadas à fase jogável. O cenário se dissolve no mesmo lugar, sem uma segunda tela deslizando lateralmente. Pular uma viagem acelera sua conclusão e usa a mesma chegada. A prévia inclui todas as fronteiras, inclusive Cerrado → Gruta → Pantanal.
+As cutscenes terminam com a posição e a passada do personagem alinhadas à fase jogável. O cenário se dissolve no mesmo lugar, sem uma segunda tela deslizando lateralmente. Pular uma viagem acelera sua conclusão e usa a mesma chegada. A prévia inclui todas as fronteiras, inclusive Cerrado → Pantanal.
+
+A Gruta dos Antigos fica dentro do Cerrado. Depois do marco de Cecília há uma abertura na pedra: chegue perto e aperte **E** para descer pela corda. Use **E** junto à corda lá dentro para subir de volta ao mesmo ponto. A descida e a subida têm uma animação própria, sem mudar de ato. Pinturas, Boitatá e fogo frio continuam nesse interior; depois de libertar Boitatá e concluir o reencontro com Cecília, a saída do Cerrado leva ao Pantanal. A prévia tem botões para testar a entrada e a volta.
+
+O Capelobo aparece na arena ao fim do Cerrado, mesmo depois de uma visita à gruta. Na exploração temporária, escolher uma fase também permite testar seu guardião novamente, mantendo o progresso salvo protegido. Para testar diretamente, use **Luta do Capelobo** na prévia.
+
+As animações dos personagens incorporam a versão da pasta `a-terra-que-rejeitou-main0`: respiração, inclinação na corrida, alongamento no salto e rastros no dash. São efeitos visuais; a colisão e a duração da invulnerabilidade continuam iguais.
+
+O cenário usa as texturas clássicas de pixel art, com pixels inteiros, contornos marcados e dithering visível na terra, pedras, folhas, raízes e céu. A resolução de renderização continua em 864×486, com ampliação sem filtro de desfoque para manter a nitidez. O campo de visão, a física, as colisões e as animações mantêm as mesmas medidas. As peças são reutilizadas em cache. Verificação das texturas, recortes e capturas: `node --test tools/test-rendering.js`.
+
+Fogueiras, tochas, relíquias e pontos de luz têm um brilho difuso que perde força gradualmente, sem a borda de um disco colorido. Os sprites e materiais continuam pixelados.
+
+Os mobs observam, se aproximam e anunciam os ataques antes de executar o golpe. Patrulhas, recuos, investidas e recuperações variam por espécie e indivíduo, com poses intermediárias nas patas, asas, cabeça e cauda. Na gruta, o som continua atraindo lacraias; morcegos avisam antes de mergulhar, sapos preparam o salto e a língua, e besouros expõem o casco ao virar. Para experimentar um mob ou um grupo, abra http://localhost:5179/tools/preview-mobs.html. A prévia permite pausar os movimentos, mudar de ambiente e proteger o jogador, sem ler ou gravar o progresso do jogo.
 
 Para testar esse capítulo e os dois retornos sem alterar seu progresso, abra http://localhost:5179/tools/preview-journey.html. A ferramenta permite reabrir o estado salvo do teste, apenas na memória. Verificações: `node --test tools/test-dash.js tools/test-music.js tools/test-mapinguari.js tools/test-sfx.js tools/test-journey.js`.
 

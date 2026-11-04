@@ -40,8 +40,7 @@ function closeDialog() { DQ = null; UI.dialog = false; dEl.hidden = true; CONV.p
 const RETRATO = { 'Cecília': 'arqueira', 'Bento': 'canoeiro', 'Rosa': 'lanceira', 'Celina': 'ancia', 'Davi': 'cacador', 'Lia': 'mestraA', 'Nina': 'nina', 'Caçador': 'cacador', 'Mestra da zarabatana': 'mestraA', 'Mestra do arco': 'arqueira', 'Velho canoeiro': 'canoeiro', 'Lanceira da cabaça': 'lanceira', 'Anciã das sementes': 'ancia', 'Anciã': 'ancia' };
 const RETRATO_BOSS = { 'Mapinguari': 'mapinguari', 'Capelobo': 'capelobo', 'Pai do Mato': 'paidomato', 'Labatut': 'labatut', 'Corpo-seco': 'corposeco' };
 const CONV = { partner: null, who: null, t0: 0, tw: 0 };
-const convC = document.createElement('canvas'); convC.width = 90; convC.height = 100;
-const convX = convC.getContext('2d');
+const [convC, convX] = mk(90, 100);
 function convSpeaker(who) {
   if (RETRATO[who] || (RETRATO_BOSS[who] && BOSSES[RETRATO_BOSS[who]])) { if (!CONV.partner) CONV.t0 = G.rt; if (CONV.partner !== who) CONV.partner = who; }
   if (CONV.who !== who) CONV.tw = G.rt;
@@ -56,8 +55,8 @@ function drawConversation() {
   const glow = (x, on) => { const sw = clamp((t - CONV.tw) / 0.25, 0, 1), k = on ? sw : 1 - sw * 0.4; if (!on && k <= 0.6) return; const g = ctx.createRadialGradient(x, base - 70, 4, x, base - 70, 90); g.addColorStop(0, on ? '#f2c14e38' : '#8a7ab018'); g.addColorStop(1, '#f2c14e00'); ctx.globalAlpha = e * (on ? k : 0.5); ctx.fillStyle = g; ctx.fillRect(x - 90, base - 160, 180, 180); ctx.globalAlpha = 1; };
   glow(lx, me); glow(rx, them);
   if (L.portrait) for (const x of [lx, rx]) { ctx.globalAlpha = 0.5 * e; ell(ctx, x, base, 34, 4, '#000'); ctx.globalAlpha = 1; }
-  // o espírito: desenhado pequeno e ampliado 3×, pixel por pixel
-  convX.clearRect(0, 0, convC.width, convC.height);
+  // Retratos em resolução fina, mantendo o tamanho e a posição da conversa.
+  convX.clearRect(0, 0, 90, 100);
   drawHuman(convX, 45, 96 - (me ? talking : 0), 1, { kind: 'idle', t }, playerSpec(G.P.form));
   ctx.imageSmoothingEnabled = false;
   ctx.filter = me || !them ? 'none' : 'brightness(0.45) saturate(0.7)';
@@ -66,7 +65,7 @@ function drawConversation() {
   ctx.filter = them || !me ? 'none' : 'brightness(0.45) saturate(0.7)';
   ctx.globalAlpha = e;
   if (RETRATO[partner]) {
-    convX.clearRect(0, 0, convC.width, convC.height);
+    convX.clearRect(0, 0, 90, 100);
     convX.save(); convX.translate(45, 96 - (them ? talking : 0));
     const scale = partner === 'Nina' ? 0.76 : 1;
     convX.scale(scale, scale);
@@ -275,7 +274,7 @@ const CARDS = [
   ['Final', 'O coração da mata', '', 'Abrir mão.'],
 ];
 // A passagem dissolve o cenário no mesmo lugar; a chegada mantém o corpo em movimento.
-const transC = document.createElement('canvas'); transC.width = W; transC.height = H;
+const [transC] = mk(W, H);
 function snapshotScene() { transC.getContext('2d').drawImage(cv, 0, 0); }
 function captureTravelArrival(A, B, from, to, card, form) {
   // Não desenha o quadro sem personagem no canvas visível, nem por um único frame.
@@ -294,13 +293,13 @@ function drawTransition() {
   ctx.globalAlpha = 1 - e; ctx.drawImage(transC, 0, 0); ctx.globalAlpha = 1;
   // A captura de chegada não contém o espírito: há um único corpo, já na fase jogável.
   if (transition.kind === 'arrival' && G.P) {
-    ctx.save(); ctx.translate(-Math.round(G.cam.x), DY); drawPlayer(G.P, G.t); ctx.restore();
+    ctx.save(); ctx.translate(-G.cam.x, DY); drawPlayer(G.P, G.t); ctx.restore();
   }
 }
 // ---------- Cutscene de viagem entre biomas ----------
 // O espírito atravessa a paisagem correndo: o bioma de onde sai se dissolve no próximo (céu, fundo, chão e árvores),
 // com faixas de cinema, letreiro do ato, partículas da região e a rota da jornada. Uns 6 s; pula depois do 1º segundo.
-const ROTA = ['prologo', 'amazonia', 'cerrado', 'gruta', 'pantanal', 'caatinga', 'mata', 'coracao'];
+const ROTA = ['prologo', 'amazonia', 'cerrado', 'pantanal', 'caatinga', 'mata', 'coracao'];
 const ROTA_NOME = { prologo: 'Prólogo', amazonia: 'Amazônia', cerrado: 'Cerrado', gruta: 'Gruta', pantanal: 'Pantanal', caatinga: 'Caatinga', mata: 'Mata Atlântica', coracao: 'Coração' };
 // cor das partículas e direção (1 cai, -1 sobe, 0 flutua)
 const VIAGEM_PART = { prologo: ['#8a8ab0', 0], amazonia: ['#c8f060', 0], cerrado: ['#ffb04a', -1], gruta: ['#8a7a6a', 1], pantanal: ['#f8d8e8', 0], caatinga: ['#e8d8b0', 0.4], mata: ['#9fe0d0', 1], coracao: ['#7af0e0', -1] };
@@ -355,7 +354,7 @@ function caveCeiling(x0, x1, mouth, dir, t) {
   }
 }
 function drawTravel(k, tt, A, B, from, to, card, form, hideHero = false) {
-  const V = travelWorld(from, to), cam = Math.round(tt * VIAGEM_VEL), top = -DY, bot = H - DY;
+  const V = travelWorld(from, to), cam = tt * VIAGEM_VEL, top = -DY, bot = H - DY;
   const heroX = cam + VIAGEM_PX, e0 = clamp((heroX - (V.Xb - 70)) / 140, 0, 1), e = e0 * e0 * (3 - 2 * e0);
   // fundo: o céu e as camadas do bioma de saída cedem para o de chegada quando o espírito cruza a fronteira
   drawBackground(A, cam, tt);
@@ -381,7 +380,7 @@ function drawTravel(k, tt, A, B, from, to, card, form, hideHero = false) {
   const dh = heroX - V.hopX + 34, air = dh > 0 && dh < 52, jy = air ? Math.round(-Math.sin(dh / 52 * Math.PI) * 22) : 0;
   const px = heroX, py = GY + jy;
   if (!hideHero) {
-    if (form === 'espirito') { ctx.globalAlpha = 0.15; ell(ctx, px, py - 13, 12, 16, '#8a7ab0'); ctx.globalAlpha = 1; }
+    if (form === 'espirito') softGlow(ctx, px, py - 13, 24, 30, '#8a7ab0', 0.25);
     // riscos de vento passando pelo corpo (dá a sensação de velocidade)
     for (let i = 0; i < 5; i++) { const p = (tt * 2.2 + i * 0.37) % 1, wy = py - 8 - (i * 9) % 34; ctx.globalAlpha = 0.35 * Math.sin(p * Math.PI); rect(ctx, px + 14 - p * 46, wy, 8 + (i % 3) * 4, 1, '#f4ecd8'); }
     ctx.globalAlpha = 1;
@@ -496,17 +495,13 @@ async function walkOut() {
   }
   snapshotScene();
 }
-// fase atual do ato (o Ato II continua na Gruta dos Antigos depois do Capelobo)
+// Fase atual do ato, incluindo o interior do Cerrado nos saves da gruta.
 function homeLevel(n = G.save.act) { return n === 2 && G.save.sub === 'gruta' ? 'gruta' : ACTS[n]; }
 async function enterGruta() {
-  await walkOut();
-  const from = G.lvl.biome;
-  G.save.sub = 'gruta'; G.save.fire = null; G.save.drop = null; writeSave();
-  hud.boss.hidden = true;
-  await travelScene(from, 'gruta', GRUTA_CARD);
-  return enterAct(G.save.act, { walkIn: true, smooth: true, noToast: true });
+  return useCavePassage('down');
 }
 async function nextAct() {
+  if (G.lvl.id === 'gruta') return;
   await walkOut();
   const from = G.lvl.biome;
   G.save.act++; G.save.sub = null; G.save.fire = null; G.save.drop = null; writeSave();
@@ -590,7 +585,7 @@ function restAt(f) {
   });
 }
 function checkTriggers() {
-  if (G.arriving) return;
+  if (G.arriving || G.cavePassage) return;
   const px = G.P.x + 5;
   for (const t of G.lvl.triggers) if (!t.done && px > t.x) { t.done = true; scene(t.fn); }
 }
@@ -1108,7 +1103,7 @@ const STORY = {
     await fade(true);
     G.sceneDraw = t => {
       ctx.drawImage(biome('prologo').sky, 0, 0); rect(ctx, 0, GY, W, 30, '#191c25'); rect(ctx, 0, GY, W, 2, '#3b4252');
-      ctx.globalAlpha = 0.18; ell(ctx, 160, 140, 70, 40, '#ffb050'); ctx.globalAlpha = 1;
+      softGlow(ctx, 160, 140, 90, 65, '#ffb050', 0.3);
       drawFire(ctx, 160, GY, t, true);
       drawHuman(ctx, 132, GY, 1, { kind: 'kneel', t }, NPC.ancia);
       drawChild(ctx, 188, GY, -1);
@@ -1144,7 +1139,7 @@ function renderTitle(t) {
   const b = biome('prologo');
   drawBackground(b, t * 6, t);
   rect(ctx, 0, GY, W, 30, b.ground.fill); rect(ctx, 0, GY, W, 2, b.ground.top);
-  ctx.globalAlpha = 0.15 + Math.sin(t * 3) * 0.05; ell(ctx, W / 2, GY - 13, 14, 18, '#8a7ab0'); ctx.globalAlpha = 1;
+  softGlow(ctx, W / 2, GY - 13, 28, 35, '#8a7ab0', 0.25 + Math.sin(t * 3) * 0.04);
   drawHuman(ctx, W / 2, GY, 1, { kind: 'idle', t }, SPEC.espirito);
   for (let i = 0; i < 24; i++) { const x = (hash(i) * W + t * 6 * (hash(i + 1) - 0.5) * 2 + W) % W, y = 40 + hash(i + 2) * 110 + Math.sin(t * 0.7 + i) * 6; ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(t * 1.5 + i)); rect(ctx, x, y, 1, 1, '#b8b0e0'); }
   ctx.globalAlpha = 1;

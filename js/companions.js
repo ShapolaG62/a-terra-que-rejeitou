@@ -176,7 +176,7 @@ function companionInteractables(add) {
   }
   const r = companionState(id);
   if (!r.helped) add(c.taskX, GY, c.action, () => scene(() => companionHelp(id)));
-  if (c.exitX && companionOutcome(id) && G.save.act === c.act && !G.save.sub) add(c.exitX, GY, id === 'cerrado' ? 'Seguir para a Gruta dos Antigos' : id === 'pantanal' ? 'Seguir para a Caatinga' : 'Seguir para a Mata Atlântica', () => scene(id === 'cerrado' ? enterGruta : nextAct));
+  if (c.exitX && companionOutcome(id) && G.save.act === c.act && !G.save.sub && (id !== 'cerrado' || SV().ev.boitata)) add(c.exitX, GY, id === 'cerrado' ? 'Seguir para o Pantanal' : id === 'pantanal' ? 'Seguir para a Caatinga' : 'Seguir para a Mata Atlântica', () => scene(nextAct));
 }
 function companionFireAction(f) {
   const id = G.lvl.id, c = COMPANIONS[id];
@@ -228,7 +228,7 @@ async function companionReturnTalk(id) {
   try {
     await talk([[c.who, { cerrado: 'A fita levantou antes de eu ouvir seus passos. Sabia que alguém vinha.', pantanal: 'Deixei a canoa amarrada. Hoje não ia embora antes de ver você voltar.', caatinga: 'Chega para cá. Ainda tem sombra. E eu tenho uma pergunta, mas pode beber primeiro.' }[id]], [c.who, companionOutcome(id) === 'poupar' ? c.spare : c.purify]]);
     if (c.recall[r.choice]) await talk([[c.who, c.recall[r.choice]]]);
-    await talk([[c.who, id === 'cerrado' ? 'A entrada da gruta fica depois do marco. Não precisa entrar sem respirar primeiro.' : 'Pode ficar um pouco. A próxima trilha não sai do lugar.']]);
+    await talk([[c.who, id === 'cerrado' ? SV().ev.boitata ? 'A trilha para o Pantanal está aberta. Pode respirar antes de seguir.' : 'A abertura na pedra fica depois do marco. Chegue perto e use Agir para descer. Eu fico aqui em cima.' : 'Pode ficar um pouco. A próxima trilha não sai do lugar.']]);
     r.returned = true; writeSave();
     hint('Converse, descanse ou use E na saída da margem para continuar.', 'Converse, descanse ou use Agir na saída para continuar.', 6);
   } finally { G.P.kneel = false; G.flags.journeyQuiet = false; }
