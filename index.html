@@ -69,40 +69,71 @@ button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none
 .vol{display:flex;align-items:center;gap:10px;padding:6px 14px;background:#1a1416;border:2px solid #4a3c30;font-size:15px}
 .btn.vol{justify-content:flex-start;cursor:default}
 .vol span{min-width:7.5em}
+#achToast{position:fixed;z-index:60;left:50%;top:max(10px,env(safe-area-inset-top));transform:translate(-50%,-140%);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 24px);padding:8px 16px 8px 12px;background:#120e12f4;border:2px solid var(--gold);box-shadow:0 0 0 2px #000,0 4px 18px #000c;transition:transform .4s;pointer-events:none}
+#achToast.on{transform:translate(-50%,0)}
+#achToast i{font-style:normal;font-size:24px;color:var(--gold);line-height:1}
+#achToast small{display:block;font-size:11px;color:var(--mut);letter-spacing:.04em}
+#achToast b{display:block;font-size:15px;color:var(--cream)}
+#achToast.plat{border-color:#d8ecff;background:#141a24f6}
+#achToast.plat i{color:#d8ecff;text-shadow:0 0 8px #9fd0ff}
+.achbar{height:8px;background:#0a0708;border:1px solid #4a3c30;margin-bottom:4px}
+.achbar i{display:block;height:100%;background:linear-gradient(#f2d27a,#a8782a)}
+.panel:has(.conqs){max-width:520px;height:min(100%,600px);display:flex;flex-direction:column;overflow:hidden;padding:14px 14px 12px}
+.conqs{display:flex;flex-direction:column;min-height:0;flex:1}
+.conqs .achbar{flex:none;margin-bottom:8px}
+.conqs .lista{flex:1 1 0;min-height:0;margin-top:0;overflow-y:auto;overscroll-behavior:contain;padding-right:6px;flex-wrap:nowrap}
+.conqs .lista>.btn{flex:none}
+.conqs>.btns:last-child{flex:none;margin-top:8px}
+.conqs>.btns:last-child .btn{justify-content:center}
+/* a barra de rolagem: canaleta de casca escura e puxador de palha trançada */
+.conqs .lista::-webkit-scrollbar{width:12px}
+.conqs .lista::-webkit-scrollbar-button{display:none}
+.conqs .lista::-webkit-scrollbar-track{background:var(--tx-rebaixo) #0d0a09;border:2px solid #000;box-shadow:inset 0 0 0 1px #4a3c30}
+.conqs .lista::-webkit-scrollbar-thumb{background:var(--tx-palha) #7c5a2c;border:2px solid #000;box-shadow:inset 0 1px 0 #f2c14e,inset 0 -1px 0 #a8782a}
+.conqs .lista::-webkit-scrollbar-thumb:hover,.conqs .lista::-webkit-scrollbar-thumb:active{filter:brightness(1.2)}
+@supports not selector(::-webkit-scrollbar){.conqs .lista{scrollbar-width:thin;scrollbar-color:#9a7638 #0d0a09}}
+@media(max-height:520px){.panel:has(.conqs){padding:10px 12px}.conqs h2{margin-bottom:2px}.conqs p{margin-bottom:4px}}
+.btn.ach{justify-content:flex-start;gap:10px;cursor:default;padding:7px 10px;opacity:.62;text-align:left}
+.btn.ach.ok{opacity:1}
+.btn.ach i{flex:none;width:1.1em;font-style:normal;font-size:18px;color:var(--gold);text-align:center}
+.btn.ach span{flex:1;min-width:0}
+.btn.ach b{display:block;font-size:15px;font-weight:600;color:var(--cream)}
+.btn.ach small{display:block;font-size:12.5px;line-height:1.25}
+.btn.ach em{flex:none;font-style:normal;font-size:11.5px;color:var(--mut)}
+.btn.ach.plat{border-color:#7a8aa0}
+.btn.ach.plat i{color:#d8ecff}
+.btn.ach.plat.ok{border-color:#d8ecff;box-shadow:0 0 10px #9fd0ff55}
+.sttl{font-size:14px;color:var(--mut);font-weight:600;letter-spacing:.04em;margin:12px 0 2px}
 .panel p.hint{font-size:13px;color:var(--mut);margin:10px 0 0}
 .vol span{color:var(--cream)}
 .vol input{flex:1;min-width:0;height:28px;accent-color:var(--gold);cursor:pointer}
 .vol b{min-width:2.8em;text-align:right;color:var(--gold);font-weight:600;font-size:14px}
 .btn[disabled]{opacity:.45;cursor:default}
 
-#title{background:linear-gradient(#0d0b1000,#0d0b10ee 70%);align-items:flex-end;padding-bottom:max(24px,env(safe-area-inset-bottom))}
-#title .wrap{max-width:460px;width:100%;text-align:center}
+#title{background:linear-gradient(#0d0b1000,#0d0b10ee 70%);align-items:flex-start;padding-bottom:max(24px,env(safe-area-inset-bottom))}
+#title .wrap{max-width:460px;width:100%;text-align:center;margin-top:auto}
 #title h1{font-size:clamp(34px,8vw,58px);line-height:1;letter-spacing:.02em;color:var(--cream);text-shadow:3px 3px 0 #000,0 0 30px #e0703a55}
 #title .sub{color:var(--mut);margin:8px 0 18px;font-size:15px}
 #title .btns{max-width:300px;margin:0 auto}
 #title .btn{justify-content:center}
 #title .note{color:#7d7266;font-size:12px;margin-top:16px;line-height:1.4}
+/* tela baixa (celular deitado): título menor e botões em duas colunas, para caber tudo */
+@media(max-height:520px){
+  #title{padding-top:8px;padding-bottom:max(8px,env(safe-area-inset-bottom))}
+  #title .wrap{max-width:600px}
+  #title h1{font-size:24px}
+  #title .sub,#title .note{display:none}
+  #title .btns{display:grid;grid-template-columns:1fr 1fr;max-width:none;gap:6px;margin-top:8px}
+  #title .btn{padding:7px 10px;font-size:15px}
+}
 
 /* ---------- Animações de abertura ---------- */
+#fumaca{position:fixed;inset:0;width:100%;height:100%;z-index:60}
 #intro{position:fixed;inset:0;z-index:40;background:#000;overflow:hidden}
 #introVideo{width:100%;height:100%;display:block;object-fit:contain}
-#intro .intro-start{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#0006}
 #intro .btn{background:#120e12e6;justify-content:center}
 #intro .intro-footer{position:absolute;left:max(20px,env(safe-area-inset-left));right:max(20px,env(safe-area-inset-right));bottom:max(20px,env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:space-between;gap:16px}
 #introStatus{color:var(--cream);font-size:14px;text-shadow:1px 1px #000}
-#intro .intro-start{background:radial-gradient(ellipse at center,#252316 0%,#10140e 45%,#070b08 100%);z-index:2}
-#intro .start-art{position:relative;flex:none;width:100%;height:100%}
-#intro .start-emblem{position:absolute;left:50%;top:50%;width:clamp(100px,min(23vw,34vh),260px);aspect-ratio:1;transform:translate(-50%,-50%);display:block;padding:0;border:0;border-radius:50%;background:transparent;box-shadow:none;cursor:pointer}
-#intro .start-emblem{isolation:isolate}
-#intro .start-emblem::before,#intro .start-emblem::after{content:'';position:absolute;inset:-20%;z-index:-1;pointer-events:none;border-radius:50%;animation:start-emblem-light 5s ease-in-out infinite}
-#intro .start-emblem::before{background:radial-gradient(ellipse at 28% 35%,#ffcf5cbb,transparent 48%),radial-gradient(ellipse at 74% 42%,#d9ee8e99,transparent 44%),radial-gradient(ellipse at 50% 76%,#f9a43a99,transparent 45%);filter:blur(15px)}
-#intro .start-emblem::after{inset:-10%;background:radial-gradient(circle at 15% 22%,#fff5bb 0 1%,#ffc75b88 2%,transparent 7%),radial-gradient(circle at 88% 30%,#fff3be 0 1%,#ebd67c88 2%,transparent 7%),radial-gradient(circle at 12% 78%,#ffe9a6 0 .8%,#ffbb5288 2%,transparent 6%),radial-gradient(circle at 82% 88%,#fff0af 0 .8%,#e5ca6b88 2%,transparent 7%);filter:blur(2px);animation-delay:-2.5s}
-#intro .start-emblem img{display:block;width:100%;height:100%;border-radius:50%;clip-path:circle(49%);pointer-events:none;animation:start-emblem-breathe 5s ease-in-out infinite}
-#intro .start-emblem:focus-visible{outline:2px solid #d9b77a;outline-offset:6px}
-@keyframes start-emblem-breathe{0%,100%{transform:scale(1);filter:brightness(.97)}50%{transform:scale(1.025);filter:brightness(1.035)}}
-@keyframes start-emblem-light{0%,100%{opacity:.45;transform:scale(.96)}50%{opacity:.9;transform:scale(1.06)}}
-@media(prefers-reduced-motion:reduce){#intro .start-emblem img,#intro .start-emblem::before,#intro .start-emblem::after{animation:none}}
-#intro:has(.intro-start:not([hidden])) .intro-footer{display:none}
 #bIntroSkip{margin-left:auto;font-size:14px;white-space:nowrap}
 
 #card{background:#000;flex-direction:column;text-align:center;cursor:pointer}
@@ -176,12 +207,14 @@ body.landscape #touch .acts .big{width:60px;height:60px}
 body.landscape #touch .acts button{width:50px;height:50px;font-size:11px}
 body.landscape #touch .acts .sm{width:44px;height:44px}
 </style>
+<link rel="stylesheet" href="css/inventario.css">
+<script src="js/inventario.js"></script>
 </head>
 <body>
 <audio id="music" preload="none" hidden></audio>
+<canvas id="fumaca" width="240" height="135" hidden></canvas>
 <section id="intro" aria-label="Abertura do jogo">
   <video id="introVideo" preload="auto" playsinline disablepictureinpicture aria-label="Animação de abertura"></video>
-  <div id="introStart" class="intro-start"><div class="start-art"><button class="start-emblem" id="bIntroPlay" aria-label="Iniciar jogo"><img src="assets/ui/start-button.jpg" alt="" draggable="false"></button></div></div>
   <div class="intro-footer">
     <p id="introStatus" role="status">Carregando abertura…</p>
     <button class="btn" id="bIntroSkip">Pular abertura <small>Esc / B</small></button>
@@ -248,12 +281,14 @@ body.landscape #touch .acts .sm{width:44px;height:44px}
 <script src="js/art.js"></script>
 <script src="js/tiles.js"></script>
 <script src="js/fauna.js"></script>
+<script src="js/conquistas.js"></script>
 <script src="js/pixelfx.bundle.js"></script>
 <script src="js/vfx.js"></script>
 <script src="js/world.js"></script>
 <script src="js/intro.js"></script>
 <script src="js/bosses.js"></script>
 <script src="js/beasts.js"></script>
+<script src="js/chefes.js"></script>
 <script src="js/pxfont.js"></script>
 <script src="js/hudart.js"></script>
 <script src="js/journey.js"></script>

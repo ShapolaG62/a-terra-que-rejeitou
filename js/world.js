@@ -15,7 +15,7 @@ const FORMS = {
   espirito: { nome: 'Espírito sem forma', atk: { type: 'melee', dur: 0.34, act: [0.08, 0.18], range: 17, h: 22, dmg: 10, st: 10 }, shot: { dmg: 6, spd: 220, kind: 'orb' }, sp: null, dash: { dur: 0.34, spd: 170 } },
   zarabatana: { nome: 'Caçador da zarabatana', povo: 'Amazônia', atk: { type: 'melee', dur: 0.3, act: [0.07, 0.16], range: 20, h: 22, dmg: 11, st: 9 }, shot: { dmg: 10, spd: 320, kind: 'dart', st: 7 }, sp: { type: 'burst', dur: 0.5, st: 45, cd: 1.2, dmg: 6 }, dash: { dur: 0.42, spd: 215 } },
   arco: { nome: 'Arqueira do cerrado', povo: 'Cerrado', atk: { type: 'combo', st: 11, hits: [{ dur: 0.3, act: [0.07, 0.16], range: 22, h: 22, dmg: 12 }, { dur: 0.3, act: [0.07, 0.16], range: 22, h: 22, dmg: 12 }, { dur: 0.46, act: [0.14, 0.26], range: 26, h: 24, dmg: 20 }] }, shot: { dmg: 11, spd: 330, kind: 'arrow' }, sp: { type: 'firearrow', dur: 0.5, st: 45, cd: 1.3, dmg: 14 }, dash: { dur: 0.34, spd: 185 }, track: true },
-  lanca: { nome: 'Canoeiro das águas', povo: 'Pantanal', atk: { type: 'melee', dur: 0.42, act: [0.12, 0.24], range: 34, h: 14, dmg: 17, st: 13 }, shot: { dmg: 9, spd: 260, kind: 'javelin', grav: 60 }, sp: { type: 'throw', dur: 0.45, st: 45, cd: 1.2, dmg: 24 }, dash: { dur: 0.34, spd: 180 }, water: true },
+  lanca: { nome: 'Canoeiro das águas', povo: 'Pantanal', atk: { type: 'melee', dur: 0.42, act: [0.12, 0.24], range: 34, h: 14, dmg: 17, st: 13 }, shot: { dmg: 9, spd: 260, kind: 'jato', grav: 60 }, sp: { type: 'throw', dur: 0.45, st: 45, cd: 1.2, dmg: 24 }, dash: { dur: 0.34, spd: 180 }, water: true },
   cabaca: { nome: 'Lanceira da cabaça', povo: 'Caatinga', atk: { type: 'melee', dur: 0.38, act: [0.1, 0.22], range: 28, h: 20, dmg: 16, st: 12 }, shot: { dmg: 9, spd: 250, kind: 'drop', grav: 120 }, sp: { type: 'splash', dur: 0.5, st: 42, cd: 1.4, dmg: 16 }, dash: { dur: 0.34, spd: 180 }, heatRes: 0.7 },
   semente: { nome: 'Anciã das sementes', povo: 'Mata Atlântica', atk: { type: 'melee', dur: 0.36, act: [0.1, 0.22], range: 24, h: 22, dmg: 17, st: 11 }, shot: { dmg: 10, spd: 280, kind: 'seed' }, sp: { type: 'roots', dur: 0.5, st: 48, cd: 1.4, dmg: 28 }, dash: { dur: 0.36, spd: 190 } },
 };
@@ -117,6 +117,8 @@ function loadLevel(id) {
 }
 
 // ---------- Jogador ----------
+// Modo de teste: abrir o jogo com ?teste no endereço. Invulnerável, dano x10, 2,5x mais rápido; não conta conquistas nem estatísticas.
+G.teste = typeof location !== 'undefined' && new URLSearchParams(location.search).has('teste');
 function statMax() { const s = G.save; return { hp: 100 + s.vig * 15 + itemBonus('hp'), st: 100 + s.fol * 12 + itemBonus('st'), flasks: Math.min(9, 3 + Math.floor(s.act / 2) + (s.bonusFlask || 0) + itemBonus('flask')) }; }
 function makePlayer(x, y) {
   const m = statMax();
@@ -134,10 +136,11 @@ function updatePlayer(dt) {
   if (G.auto) mx = G.auto;
   if (P.stun > 0) { P.stun -= dt; mx = 0; }
   P.inv -= dt; P.stDelay -= dt; P.spCd -= dt; P.jbuf -= dt; P.drop -= dt; P.slow -= dt;
+  if (G.teste) { P.hp = statMax().hp; P.st = P.stMax(); P.breath = 100; P.slow = 0; P.stun = 0; G.heat = 0; }
   const hot = G.heat >= 100;
   if (P.stDelay <= 0 && P.state !== 'dash' && P.state !== 'attack') P.st = Math.min(P.stMax(), P.st + (hot ? 22 : 48) * dt);
   const water = P.inWater && !F.water, wform = P.inWater && F.water;
-  let spd = 88 * (1 + itemBonus('speed')) * (water ? 0.55 : wform ? 1.12 : 1) * (P.slow > 0 ? 0.55 : 1) * (G.speedMul || 1) * (G.lvl.cave && I.down.down && P.onG ? 0.45 : 1);
+  let spd = 88 * (1 + itemBonus('speed')) * (water ? 0.55 : wform ? 1.12 : 1) * (P.slow > 0 ? 0.55 : 1) * (G.speedMul || 1) * (G.lvl.cave && I.down.down && P.onG ? 0.45 : 1) * (G.teste && !G.auto ? 2.5 : 1);
   const press = a => ctl && P.stun <= 0 && I.pressed[a];
   const vine = P.state === 'normal' && nearVine(P);
   if (vine && press('up') && P.ab.jump) grabVine(vine);
@@ -147,7 +150,7 @@ function updatePlayer(dt) {
     if (press('jump')) P.jbuf = 0.13;
     if (P.jbuf > 0 && (P.onG || P.coy > 0) && P.ab.jump) {
       if (I.down.down && P.plat && P.plat.t === 'p') { P.drop = 0.25; P.jbuf = 0; }
-      else { P.vy = -JUMP * (water ? 0.8 : wform ? 1.15 : 1); P.jbuf = 0; P.coy = 0; P.jumping = true; SFX.jump(); if (!P.inWater) VFX.dust(P.x + 5, P.y + P.h, 0, 0.7); if (P.inWater) splash(P.x + 5, P.y + P.h); }
+      else { P.vy = -JUMP * (water ? 0.8 : wform ? 1.15 : 1); P.jbuf = 0; P.coy = 0; P.jumping = true; SFX.jump(); if (!P.inWater) VFX.dust(P.x + 5, P.y + P.h, 0, 0.7); }
     }
     if (P.jumping && !I.down.jump && P.vy < -110) { P.vy = -110; P.jumping = false; }
     if (press('attack') && P.ab.attack && P.st > 0) startAttack();
@@ -208,7 +211,7 @@ function updatePlayer(dt) {
   // água
   const wasW = P.inWater; P.inWater = false;
   for (const w of G.lvl.water) if (P.x + 5 > w.x && P.x + 5 < w.x + w.w && P.y + P.h > w.y + 3) P.inWater = true;
-  if (P.inWater !== wasW && Math.abs(P.vy) > 40) splash(P.x + 5, (G.lvl.water[0] || {}).y || P.y + P.h);
+  if (P.inWater && !wasW && P.vy > 40) { const w = G.lvl.water.find(a => P.x + 5 > a.x && P.x + 5 < a.x + a.w); splash(P.x + 5, w.y); }
   // queda em abismo
   if (P.y > (G.lvl.h || WORLD_H) + 40 && P.state !== 'dead') { P.x = P.safe.x; P.y = P.safe.y; P.vx = P.vy = 0; P.jbuf = 0; hurtPlayer(15, null, { pit: true }); }
   // passos e animação
@@ -272,7 +275,7 @@ function moveBody(b, dt) {
 const PERTO = { dmg: 1.3, st: 0.7 }, LONGE = { dmg: 0.75, st: 1.4 };
 const SP_PERTO = { splash: true };
 // De onde sai cada projétil: da ponta da arma na pose de disparo (x à frente do centro, y a partir do topo do corpo)
-const SAIDA = { arrow: [12, 8], firearrow: [12, 7], dart: [19, 4], burst: [19, 4], javelin: [6, 2], throw: [6, 2], drop: [9, 9], seed: [3, -12], orb: [9, 8] };
+const SAIDA = { arrow: [12, 8], firearrow: [12, 7], dart: [19, 4], burst: [19, 4], javelin: [6, 2], jato: [10, 6], throw: [6, 2], drop: [9, 9], seed: [3, -12], orb: [9, 8] };
 function shotOrigin(P, kind) { const o = SAIDA[kind] || [8, 10], foot = P.y + P.h; return [P.x + 5 + P.f * o[0] * HUMAN_S, foot - (22 - o[1]) * HUMAN_S]; }
 function startAttack(cont) {
   const P = G.P, F = FORMS[P.form] || FORMS.espirito, A = F.atk;
@@ -289,7 +292,7 @@ function startShot() {
   faceMouse();
   P.def = Object.assign({ type: 'shot', dur: 0.3, at: 0.08, st: 9 }, F.shot);
   P.state = 'attack'; P.stT = 0; P.combo = 0; P.shot = false;
-  useSt(P.def.st * LONGE.st); SFX.dart();
+  useSt(P.def.st * LONGE.st); if (P.def.kind !== 'jato') SFX.dart();
 }
 // Clique do mouse vira o personagem para o lado do cursor
 function faceMouse() { const P = G.P; if (performance.now() - I.mouseT < 150) P.f = Math.sign(I.mouseWX - (P.x + 5)) || P.f; }
@@ -317,6 +320,7 @@ function attackTick() {
       const [x, y] = shotOrigin(P, D.kind), a = aimAt(x, y, 200);
       const g = D.grav || 0, comp = aimAt.d ? g * (aimAt.d / D.spd) / 2 : 0;
       shoot({ x, y, vx: P.f * Math.cos(a) * D.spd, vy: Math.sin(a) * D.spd - comp, w: 9, h: 9, dmg: D.dmg * dmgMul() * LONGE.dmg, kind: D.kind, grav: D.grav || 0 });
+      if (D.kind === 'jato') SFX.splash();
     }
     return;
   }
@@ -383,7 +387,7 @@ function setForm(f) { G.P.form = f; G.save.form = f; updateHudForm(); }
 
 function hurtPlayer(dmg, srcX, o = {}) {
   const P = G.P;
-  if (!P || P.state === 'dead') return false;
+  if (!P || P.state === 'dead' || G.teste) return false;
   if (!o.pit && (P.inv > 0 || G.lock > 0 && !o.force)) return false;
   if (!o.pit && !o.fixed) dmg = Math.round(dmg * DIFF.dmg);
   P.hp -= dmg; P.inv = 0.85; SFX.hurt(); if (!o.pit) VFX.hurt(P); G.cam.shake = Math.max(G.cam.shake, 4); G.flash = 0.08; G.flashCol = '#c8402e';
@@ -620,7 +624,7 @@ function updateWolf(e, dt, dx, dy = 0) {
 
 function hitEnemy(e, dmg, dir, o = {}) {
   if (e.shell && dir && dir === -e.f) { shellBlock(e); return false; }
-  e.hp -= dmg; e.flash = 0.1; SFX.hit(); VFX.hitE(e, dir, o);
+  e.hp -= G.teste ? dmg * 10 : dmg; e.flash = 0.1; SFX.hit(); VFX.hitE(e, dir, o);
   if (e.fixed) { /* não se move */ }
   else if (o.melee && dir) {
     // golpe de perto empurra e atordoa um instante: o monstro não fica colado causando dano
@@ -637,7 +641,7 @@ function hitEnemy(e, dmg, dir, o = {}) {
 function killEnemy(e) {
   e.hp = 0;
   const eye = EYE[G.lvl.biome];
-  VFX.kill(e, eye);
+  VFX.kill(e, eye); CONQ.abate();
   for (let i = 0; i < 16; i++) part(e.x + e.w / 2, e.y + e.h / 2, rnd(-70, 70), rnd(-90, 10), rnd(0.4, 0.9), i % 4 ? '#1c1622' : eye);
   G.save.mem += e.mem; floatText(e.x + e.w / 2, e.y - 4, '+' + e.mem); SFX.mem();
   if (e.onDeath) e.onDeath(e);
@@ -645,26 +649,30 @@ function killEnemy(e) {
 
 // ---------- Projéteis ----------
 function shoot(o) { G.projs.push(Object.assign({ team: 'p', life: 2.2, grav: 0, set: new Set() }, o)); }
+// a água do remo estoura ao bater e acaba ali
+function molhar(p) { VFX.play('terra/jato', p.x, p.y, { impacto: true }); p.life = 0; }
 function updateProjs(dt) {
   const P = G.P;
   for (const p of G.projs) {
     p.life -= dt; p.vy += p.grav * dt; p.x += p.vx * dt; p.y += p.vy * dt;
     const box = { x: p.x - p.w / 2, y: p.y - p.h / 2, w: p.w, h: p.h };
     if (p.kind === 'fire' && Math.random() < 0.6) part(p.x, p.y, rnd(-10, 10), rnd(-20, 0), 0.3, pick(['#ffd27a', '#e0703a']));
+    if (p.kind === 'jato' && Math.random() < 0.2) part(p.x - Math.sign(p.vx) * 3, p.y + rnd(-1, 1), p.vx * 0.05, rnd(0, 20), 0.2, '#5ab8ec');
     const s = solidAt(p.x, p.y);
     if (s && s.t === 'g') {
       p.life = 0;
       if (p.team === 'p') emitNoise(p.x, p.y, 120);
       if (p.land) p.land(p, s);
+      if (p.kind === 'jato') molhar(p);
       if (p.kind === 'fire') addHazard({ kind: 'pfire', x: p.x - 18, y: s.y - 10, w: 36, h: 10, t: 0, life: 3, dmg: 4, team: 'p', tick: 0 });
       if (p.kind === 'rock') { SFX.boom(); G.cam.shake = 3; for (let i = 0; i < 4; i++) shoot({ team: 'e', x: p.x, y: s.y - 4, vx: rnd(-90, 90), vy: rnd(-180, -80), w: 4, h: 4, dmg: 8, kind: 'pebble', grav: 500, life: 1.2 }); }
       for (let i = 0; i < 4; i++) part(p.x, p.y, rnd(-30, 30), rnd(-40, 0), 0.3, '#5a4a40');
       continue;
     }
     if (p.team === 'p') {
-      for (const e of G.ents) if (e.hp > 0 && !p.set.has(e) && overlap(box, e)) { p.set.add(e); if (hitEnemy(e, p.dmg, Math.sign(p.vx), p) === false) { p.life = 0; break; } if (p.kind === 'fire') addHazard({ kind: 'pfire', x: e.x + e.w / 2 - 18, y: groundY(e.x + e.w / 2, e.y) - 10, w: 36, h: 10, t: 0, life: 3, dmg: 4, team: 'p', tick: 0 }); if (!p.pierce) { p.life = 0; break; } }
+      for (const e of G.ents) if (e.hp > 0 && !p.set.has(e) && overlap(box, e)) { p.set.add(e); if (p.kind === 'jato') molhar(p); if (hitEnemy(e, p.dmg, Math.sign(p.vx), p) === false) { p.life = 0; break; } if (p.kind === 'fire') addHazard({ kind: 'pfire', x: e.x + e.w / 2 - 18, y: groundY(e.x + e.w / 2, e.y) - 10, w: 36, h: 10, t: 0, life: 3, dmg: 4, team: 'p', tick: 0 }); if (!p.pierce) { p.life = 0; break; } }
       const B = G.boss;
-      if (p.life > 0 && B && !p.set.has(B) && overlap(box, bossBox(B))) { p.set.add(B); if (bossHurt(B, p.dmg, Math.sign(p.vx), p)) { if (p.kind === 'fire') addHazard({ kind: 'pfire', x: B.x - 18, y: GY - 10, w: 36, h: 10, t: 0, life: 3, dmg: 4, team: 'p', tick: 0 }); if (!p.pierce) p.life = 0; } }
+      if (p.life > 0 && B && !p.set.has(B) && overlap(box, bossBox(B))) { p.set.add(B); if (p.kind === 'jato') molhar(p); if (bossHurt(B, p.dmg, Math.sign(p.vx), p)) { if (p.kind === 'fire') addHazard({ kind: 'pfire', x: B.x - 18, y: GY - 10, w: 36, h: 10, t: 0, life: 3, dmg: 4, team: 'p', tick: 0 }); if (!p.pierce) p.life = 0; } }
     } else if (overlap(box, P)) {
       if (hurtPlayer(p.dmg, p.x)) { if (p.onHit) p.onHit(p); p.life = 0; }
     }
@@ -682,9 +690,21 @@ const HZ = {
   gas: { update(h, dt) { h.x += h.vx * dt; h.y += Math.sin(h.t * 2) * 6 * dt; if (overlap(h, G.P) && G.P.state !== 'dead') { G.P.slow = 0.3; G.P.st = Math.max(0, G.P.st - 30 * dt); G.P.stDelay = 0.3; if (h.stun && !h.used) { h.used = true; G.P.stun = 0.6; floatText(G.P.x + 5, G.P.y - 6, 'atordoado', '#c8f060'); } } },
     draw(h) { const a = Math.min(1, h.life) * 0.55; ctx.globalAlpha = a; for (let i = 0; i < 6; i++) ell(ctx, h.x + h.w / 2 + Math.sin(G.t * 2 + i) * h.w * 0.3, h.y + h.h / 2 + Math.cos(G.t * 1.7 + i * 2) * h.h * 0.25, h.w * 0.32 | 0, h.h * 0.3 | 0, i % 2 ? '#7a9a3a' : '#9aba4a'); ctx.globalAlpha = 1; } },
   shock: { update(h, dt) { h.x += h.vx * dt; if (!h.hit && overlap(h, G.P)) h.hit = hurtPlayer(h.dmg, h.x); if (Math.random() < 0.7) part(h.x + h.w / 2, h.y + h.h, rnd(-20, 20), rnd(-60, -20), 0.3, h.col || '#7a5a3a'); if (solidAt(h.x + (h.vx > 0 ? h.w : 0), h.y + h.h - 2)) h.life = 0; },
-    draw(h) { for (let i = 0; i < 4; i++) rect(ctx, h.x + i * 2, h.y + h.h - (6 - Math.abs(i - 1.5) * 2) * 1.6, 2, (6 - Math.abs(i - 1.5) * 2) * 1.6, h.col || '#a87a4a'); } },
+    draw(h) { for (let i = 0; i < 4; i++) { const a = (6 - Math.abs(i - 1.5) * 2) * 1.9; rect(ctx, h.x + i * 2 - 1, h.y + h.h - a - 1, 4, a + 1, '#1c140e'); } for (let i = 0; i < 4; i++) { const a = (6 - Math.abs(i - 1.5) * 2) * 1.9; rect(ctx, h.x + i * 2, h.y + h.h - a, 2, a, h.col || '#a87a4a'); rect(ctx, h.x + i * 2, h.y + h.h - a, 2, 2, '#fff0c8'); } } },
   roots: { update(h, dt) { if (h.t > h.warn && !h.hit && overlap(h, G.P)) h.hit = hurtPlayer(h.dmg, h.x + h.w / 2); if (h.t > h.warn && !h.snd) { h.snd = true; SFX.hit(); } },
-    draw(h) { const gy = h.y + h.h; if (h.t < h.warn) { ctx.globalAlpha = 0.5 + Math.sin(G.t * 25) * 0.4; for (let i = 0; i < h.w; i += 3) rect(ctx, h.x + i, gy - 1, 2, 1, h.col || '#c8803a'); ctx.globalAlpha = 1; } else { const k = Math.min(1, (h.t - h.warn) / 0.08) * Math.min(1, h.life / 0.2); for (let i = 0; i < h.w; i += 4) { const hh = h.h * k * (0.6 + 0.4 * Math.abs(Math.sin(i))); line(ctx, h.x + i + 2, gy, h.x + i + 2 + Math.sin(i) * 3, gy - hh, h.col2 || '#5a3a22', 2); } } } },
+    draw(h) {
+      const gy = h.y + h.h;
+      if (h.t < h.warn) {
+        const u = h.t / h.warn, pisca = 0.5 + Math.sin(G.t * 25) * 0.5;
+        ctx.globalAlpha = 0.12 + u * 0.2; rect(ctx, h.x, gy - h.h * u, h.w, h.h * u, '#ff4a2a');
+        ctx.globalAlpha = 0.6 + pisca * 0.4; rect(ctx, h.x, gy - 2, h.w, 2, '#ffb060');
+        for (let i = 2; i < h.w; i += 5) rect(ctx, h.x + i, gy - 4 - hash(i + h.x) * 3, 1, 3, '#fff0c8');
+        ctx.globalAlpha = 1;
+      } else {
+        const k = Math.min(1, (h.t - h.warn) / 0.08) * Math.min(1, h.life / 0.2);
+        for (let i = 0; i < h.w; i += 4) { const hh = h.h * k * (0.6 + 0.4 * Math.abs(Math.sin(i))), px = h.x + i + 2, tx = px + Math.sin(i) * 3; line(ctx, px, gy, tx, gy - hh, '#140a06', 4); line(ctx, px, gy, tx, gy - hh, h.col2 || '#5a3a22', 2); rect(ctx, tx - 1, gy - hh - 1, 2, 2, '#ffd27a'); }
+      }
+    } },
   proots: { update(h) { if (h.t > 0.22) { for (const e of G.ents) if (e.hp > 0 && !h.set.has(e) && overlap(h, e)) { h.set.add(e); hitEnemy(e, h.dmg, 0); } const B = G.boss; if (B && !h.set.has(B) && overlap(h, bossBox(B))) { h.set.add(B); bossHurt(B, h.dmg, 0); } } },
     draw(h) { drawRootBurst(h); } },
 };
@@ -695,7 +715,7 @@ function updateHazards(dt) {
 
 // ---------- Partículas e textos flutuantes ----------
 function part(x, y, vx, vy, life, col, s = 1, g = 120) { if (G.parts.length < 600) G.parts.push({ x, y, vx, vy, life, max: life, col, s, g }); }
-function splash(x, y) { SFX.splash(); VFX.splash(x, y); for (let i = 0; i < 12; i++) part(x + rnd(-6, 6), y, rnd(-40, 40), rnd(-110, -40), 0.5, i % 2 ? '#c8d8f0' : '#8aa8d0', 1, 400); }
+function splash(x, y) { SFX.splash(); VFX.queda(x, y); for (let i = 0; i < 5; i++) part(x + rnd(-4, 4), y, rnd(-22, 22), rnd(-60, -25), 0.35, i % 2 ? '#c8d8f0' : '#8aa8d0', 1, 300); }
 function updateParts(dt) {
   for (const p of G.parts) { p.life -= dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
   G.parts = G.parts.filter(p => p.life > 0);
@@ -748,14 +768,17 @@ function renderWorld() {
     for (const cn of L.canopies) if (cn.tx != null && cn.x + cn.w > cx - 40 && cn.x < cx + W + 40) drawTreeTrunk(cn.tx, cn.tw, 24 + (cn.y || 0), L.biome, cn.x);
     for (const o of L.hvines) if (o.tx != null && o.x > cx - 40 && o.x < cx + W + 40) drawTreeTrunk(o.tx, 6, 10, L.biome, o.x + 7);
   }
-  for (const f of L.fires) if (f.x > cx - 70 && f.x < cx + W + 70) { if (G.save.lit[f.id]) VFX.keep('fogo' + f.id, 'fire/campfire', f.x, groundY(f.x) + 1, { layer: 'back', light: 0.8 }); else drawFire(ctx, f.x, groundY(f.x), t, false); }
+  for (const f of L.fires) if (f.x > cx - 70 && f.x < cx + W + 70) { if (G.save.lit[f.id]) VFX.keep('fogo' + f.id, 'terra/fogueira', f.x, groundY(f.x), { layer: 'back', light: 0.7 }); else drawFire(ctx, f.x, groundY(f.x), t, false); }
   drawCaveBack(L, cx, t);
+  drawPlacas(cx);
   const E = L.echoAt;
   if (E && E.x > cx - 40 && E.x < cx + W + 40) drawEcho(E, t);
   const d = G.save.drop;
   if (d && d.lvl === L.id) drawSparkle(ctx, d.x, d.y + 3, t, '#f6e3a6');
   // chão e plataformas
   for (const s of L.solids) { if (s.wall || s.x > cx + W || s.x + s.w < cx) continue; drawSolid(s, gp, cx); }
+  limpaBeiraDoFogo(L);
+  for (const f of L.fires) if (f.x > cx - 40 && f.x < cx + W + 40) drawFogueiraChao(f, t);
   const TP = tpal(L.biome);
   ctx.save(); ctx.lineWidth = 0.55; ctx.lineCap = 'round';
   for (const dc of L.decor) if (dc.x > cx - 4 && dc.x < cx + W + 4) {
@@ -787,6 +810,7 @@ function renderWorld() {
     if (typeof drawJourneyNPCDetails === 'function') drawJourneyNPCDetails(n, gy);
   }
   VFX.world(cx); VFX.render('back', cx);
+  for (const f of L.fires) if (f.x > cx - 40 && f.x < cx + W + 40) drawFogueiraPedras(f, 1);
   // inimigos
   const eye = EYE[L.biome];
   for (const e of G.ents) if (e.hp > 0 && e.x > cx - 40 && e.x < cx + W + 40) drawEnemy(ctx, e, e.x + e.w / 2, e.y + e.h, e.t, eye);
@@ -843,7 +867,7 @@ function renderWorld() {
   // efeitos de tela
   if (L.biome === 'caatinga' && G.heat > 40) { ctx.globalAlpha = (G.heat - 40) / 60 * 0.22 * (G.heatMul > 1 ? 1.5 : 1); rect(ctx, 0, 0, W, H, '#ffe0a0'); ctx.globalAlpha = 1; }
   if (G.dark > 0) { ctx.globalAlpha = G.dark; rect(ctx, 0, 0, W, H, '#000'); ctx.globalAlpha = 1; }
-  if (L.cave) { drawCaveDark(); ctx.save(); ctx.translate(0, DY); VFX.render('top', cx); ctx.restore(); }
+  if (L.cave) { drawCaveDark(); ctx.save(); ctx.translate(-cx, DY); VFX.render('top', cx); ctx.restore(); }
   if (G.flash > 0) { ctx.globalAlpha = Math.min(0.5, G.flash * 4); rect(ctx, 0, 0, W, H, G.flashCol); ctx.globalAlpha = 1; }
   if (G.rain > 0) for (let i = 0; i < 60 * G.rain; i++) { const x = (hash(i) * W + G.t * 40 * (1 + hash(i + 9))) % W, y = (hash(i + 3) * H + G.t * 260 * (1 + hash(i + 5))) % H; rect(ctx, x, y, 1, 4, '#9fc0d8'); }
 }
@@ -956,22 +980,54 @@ function drawEngenho(x, gy, t) {
   for (let i = 0; i < 6; i++) rect(ctx, x - 50 + hash(i + 40) * 100, gy - 50 + hash(i) * 40, 1, 8 + hash(i + 2) * 10, '#3d6a4a');
   ell(ctx, x - 70, gy - 6, 12, 6, '#4a4040'); rect(ctx, x - 72, gy - 14, 4, 8, '#3a3030');
 }
+// A fogueira assentada no mapa: a terra queimada em volta, cinza no meio e uma roda de pedras meio enterradas.
+function limpaBeiraDoFogo(L) {
+  if (L.fogoLimpo) return;
+  L.fogoLimpo = true;
+  const longe = o => !L.fires.some(f => Math.abs(o.x - f.x) < 20);
+  L.decor = L.decor.filter(longe); L.grass = L.grass.filter(longe);
+}
+function drawFogueiraChao(f, t) {
+  const x = Math.round(f.x), gy = Math.round(groundY(f.x));
+  // da borda para o meio: a terra escurece e vira cinza
+  const faixas = [[21, 0, '#00000030'], [17, 0, '#00000040'], [20, 1, '#00000038'], [15, 1, '#00000048'], [15, 2, '#00000030'], [11, 2, '#00000038'], [11, 0, '#1a141090'], [8, 1, '#3a342e'], [5, 0, '#4a443c']];
+  for (const [r, dy, cor] of faixas) rect(ctx, x - r, gy + dy, r * 2, 1, cor);
+  for (let i = -18; i <= 18; i += 5) { const h = hash(i + f.x); if (h > 0.55) rect(ctx, x + i, gy + (h > 0.8 ? 1 : 0), 2, 1, '#00000050'); }
+  drawFogueiraPedras(f, 0);
+}
+// fileira de trás (0) e da frente (1); a da frente fica por cima da lenha, e o topo pega a cor do fogo quando acesa
+function drawFogueiraPedras(f, frente) {
+  const x = Math.round(f.x), gy = Math.round(groundY(f.x)), aceso = G.save.lit[f.id];
+  const P = frente ? [[-15, 1, 5], [-10, 2, 4], [-4, 2, 5], [2, 2, 4], [8, 2, 5], [14, 1, 4]] : [[-12, -1, 4], [-6, -1, 3], [5, -1, 3], [11, -1, 4]];
+  for (const [dx, dy, w] of P) {
+    rect(ctx, x + dx - 1, gy + dy - 2, w + 2, 3, '#120c08');
+    rect(ctx, x + dx, gy + dy - 2, w, 2, frente ? '#5e5a50' : '#47443c');
+    rect(ctx, x + dx, gy + dy - 2, w - 1, 1, aceso ? (frente ? '#c8945a' : '#a07848') : '#7a766a');
+    rect(ctx, x + dx - 1, gy + dy + 1, w + 2, 1, '#00000060');
+  }
+}
 function drawProj(p) {
   const f = Math.sign(p.vx) || 1;
   if (p.kind === 'dart') { rect(ctx, p.x - 3, p.y, 6, 1, '#d8c8a0'); rect(ctx, p.x + (f > 0 ? 2 : -3), p.y, 1, 1, p.poison ? '#8fe37a' : '#fff'); rect(ctx, p.x - f * 3, p.y - 1, 1, 3, '#c8402e'); }
   else if (p.kind === 'orb') { softGlow(ctx, p.x, p.y, 10, 10, '#8a7ab0', 0.5); rect(ctx, p.x - 2, p.y - 2, 4, 4, '#c8b8f0'); rect(ctx, p.x - 1, p.y - 1, 2, 2, '#ffe066'); }
   else if (p.kind === 'arrow' || p.kind === 'javelin') { const L2 = p.kind === 'arrow' ? 9 : 13, a = Math.atan2(p.vy, p.vx), cx = Math.cos(a), cy = Math.sin(a); for (let i = 0; i < L2; i++) rect(ctx, p.x - cx * i, p.y - cy * i, 1, 1, p.kind === 'arrow' ? '#c8a46a' : '#8a6a3a'); rect(ctx, p.x - 1 + cx, p.y - 1 + cy, 2, 2, '#d8d8d0'); rect(ctx, p.x - cx * (L2 - 1), p.y - cy * (L2 - 1) - 1, 1, 2, '#efe8dc'); }
+  else if (p.kind === 'jato') {
+    // uma bola de água pequena, com brilho na frente e duas gotas atrás
+    const a = Math.atan2(p.vy, p.vx), cx = Math.cos(a), cy = Math.sin(a);
+    rect(ctx, p.x - cx * 7 - 1, p.y - cy * 7 - 1, 2, 2, '#1c76bc'); rect(ctx, p.x - cx * 4 - 1, p.y - cy * 4 - 1, 2, 2, '#2a8ad0');
+    rect(ctx, p.x - 2, p.y - 3, 4, 6, '#2a8ad0'); rect(ctx, p.x - 3, p.y - 2, 6, 4, '#5ab8ec'); rect(ctx, p.x + cx - 1, p.y - 2, 2, 1, '#ffffff');
+  }
   else if (p.kind === 'drop') { rect(ctx, p.x - 2, p.y - 2, 4, 4, '#9fd0e0'); rect(ctx, p.x - 1, p.y - 2, 1, 1, '#ffffff'); rect(ctx, p.x - 3 - f * 2, p.y, 2, 1, '#9fd0e0'); }
   else if (p.kind === 'seed') { rect(ctx, p.x - 2, p.y - 1, 4, 3, '#a8844a'); rect(ctx, p.x - 1, p.y - 3, 1, 2, '#8fe37a'); rect(ctx, p.x - f * 4, p.y, 2, 1, '#6fd36a'); }
   else if (p.kind === 'fire') { rect(ctx, p.x - 4, p.y, 8, 1, '#c8a46a'); rect(ctx, p.x + f * 3, p.y - 1, 3, 3, '#ffd27a'); rect(ctx, p.x + f * 4, p.y, 1, 1, '#fff'); }
   else if (p.kind === 'spear') { rect(ctx, p.x - 9, p.y, 18, 1, '#8a6a3a'); rect(ctx, p.x + (f > 0 ? 8 : -11), p.y - 1, 3, 3, '#d8d8d0'); }
   else if (p.kind === 'crescentp') { for (let i = 0; i <= 12; i++) { const a = -1.2 + i / 12 * 2.4, th = Math.sin(i / 12 * HPI) * 4; for (let k = 0; k < th; k++) rect(ctx, p.x + f * Math.cos(a) * (10 - k), p.y + Math.sin(a) * 11, 2, 1, k < 1 ? '#ffd0c0' : '#c8202a'); } }
   else if (p.kind === 'blob') { rect(ctx, p.x - 2, p.y - 2, 5, 5, '#0d0a10'); rect(ctx, p.x - 1, p.y - 1, 2, 2, EYE[G.lvl.biome]); }
-  else if (p.kind === 'rock') { ell(ctx, p.x, p.y, 6, 5, '#6a5a4a'); rect(ctx, p.x - 3, p.y - 3, 3, 2, '#8a7a68'); }
+  else if (p.kind === 'rock') { ell(ctx, p.x, p.y, 7, 6, '#1c140e'); ell(ctx, p.x, p.y, 6, 5, '#7a6a58'); rect(ctx, p.x - 3, p.y - 3, 4, 2, '#c8b89a'); }
   else if (p.kind === 'pebble') rect(ctx, p.x - 2, p.y - 2, 4, 4, '#6a5a4a');
-  else if (p.kind === 'thorn') { rect(ctx, p.x - 3, p.y, 6, 1, '#6a4a2a'); rect(ctx, p.x + f * 2, p.y - 1, 2, 3, '#c8a46a'); }
-  else if (p.kind === 'bird') { const w = Math.sin(G.t * 20) > 0; rect(ctx, p.x - 3, p.y - 1, 7, 3, '#efe8dc'); rect(ctx, p.x + f * 4, p.y, 3, 1, '#2a2018'); rect(ctx, p.x - 6, p.y - (w ? 4 : -1), 5, 2, '#d8d0c0'); rect(ctx, p.x + 1, p.y - (w ? 4 : -1), 5, 2, '#d8d0c0'); }
-  else if (p.kind === 'drain') { ctx.globalAlpha = 0.85; rect(ctx, p.x - 4, p.y - 2, 8, 4, '#3a1a10'); rect(ctx, p.x - 2, p.y - 1, 4, 2, '#c8402e'); ctx.globalAlpha = 1; }
+  else if (p.kind === 'thorn') { const a = Math.atan2(p.vy, p.vx), c = Math.cos(a), s = Math.sin(a); softGlow(ctx, p.x, p.y, 8, 8, '#ff5a3a', 0.5); for (let i = -1; i < 9; i++) rect(ctx, p.x - c * i - 1, p.y - s * i - 1, 3, 3, '#1a0a08'); for (let i = 0; i < 8; i++) rect(ctx, p.x - c * i, p.y - s * i, 1, 1, i < 3 ? '#fff4d0' : '#ff8a3a'); }
+  else if (p.kind === 'bird') { const w = Math.sin(G.t * 20) > 0; softGlow(ctx, p.x, p.y, 11, 9, '#ffd27a', 0.55); rect(ctx, p.x - 4, p.y - 2, 9, 5, '#1c1018'); rect(ctx, p.x - 7, p.y - (w ? 5 : -2) - 1, 7, 4, '#1c1018'); rect(ctx, p.x, p.y - (w ? 5 : -2) - 1, 7, 4, '#1c1018'); rect(ctx, p.x + f * 4 - 1, p.y - 1, 3, 3, '#ff8a2a'); rect(ctx, p.x - 3, p.y - 1, 7, 3, '#efe8dc'); rect(ctx, p.x + f * 4, p.y, 3, 1, '#2a2018'); rect(ctx, p.x - 6, p.y - (w ? 4 : -1), 5, 2, '#d8d0c0'); rect(ctx, p.x + 1, p.y - (w ? 4 : -1), 5, 2, '#d8d0c0'); }
+  else if (p.kind === 'drain') { softGlow(ctx, p.x, p.y, 14, 14, '#ff2a1a', 0.75); const c = Math.cos(Math.atan2(p.vy, p.vx)), s = Math.sin(Math.atan2(p.vy, p.vx)); rect(ctx, p.x - c * 7 - 1, p.y - s * 7 - 1, 2, 2, '#c8202a'); rect(ctx, p.x - c * 11, p.y - s * 11, 1, 1, '#c8202a'); rect(ctx, p.x - 5, p.y - 4, 10, 8, '#200608'); rect(ctx, p.x - 4, p.y - 3, 8, 6, '#e8302a'); rect(ctx, p.x - 2, p.y - 2, 4, 4, '#ffb090'); rect(ctx, p.x - 1, p.y - 1, 2, 2, '#ffffff'); }
   else rect(ctx, p.x - p.w / 2, p.y - p.h / 2, p.w, p.h, '#fff');
 }
 function drawPlayer(P, t) {
@@ -1000,16 +1056,90 @@ function drawPlayer(P, t) {
   if (P.stun > 0) for (let i = 0; i < 3; i++) rect(ctx, P.x + 5 + Math.cos(t * 8 + i * 2) * 6, P.y - 4 + Math.sin(t * 8 + i * 2) * 2, 1, 1, '#c8f060');
 }
 
-// Coração da mata: semente viva num berço de raízes (vermelha enquanto corrompida, verde quando devolvida)
+// Coração da mata: um coração de madeira viva. A casca corre da base dos lóbulos à ponta, há um nó de árvore num lóbulo,
+// a ponta vira tronco e raízes, as artérias viram galhos, e a seiva brilha pelas rachaduras a cada batida
+// (âmbar enquanto corrompido, verde quando devolvido).
+const CORACAO = { sprites: {}, W: 64, H: 58, CX: 32, CY: 26 };
+function coracaoSprite(green, cheio) {
+  const k = (green ? 'v' : 'r') + (cheio ? 1 : 0), C = CORACAO;
+  if (C.sprites[k]) return C.sprites[k];
+  const [cv2, g] = mk(C.W, C.H), R = cheio ? 20 : 19;
+  const CASCA = green ? ['#16201a', '#26362a', '#3c5034', '#587040', '#809858'] : ['#1e0e12', '#38181c', '#582a24', '#78442e', '#9c683e'];
+  const fora = (px, py) => { const x = (px + 0.5 - C.CX) / R, y = -(py + 0.5 - C.CY) / R, a = x * x + y * y - 1; return a * a * a - x * x * y * y * y; };
+  for (let py = 0; py < C.H; py++) for (let px = 0; px < C.W; px++) {
+    const f = fora(px, py); if (f > 0) continue;
+    if (fora(px - 1, py) > 0 || fora(px + 1, py) > 0 || fora(px, py - 1) > 0 || fora(px, py + 1) > 0) { rect(g, px, py, 1, 1, '#0a0610'); continue; }
+    const x = (px + 0.5 - C.CX) / R, y = -(py + 0.5 - C.CY) / R;
+    // veios: faixas que nascem largas no alto e se juntam na ponta, como casca de tronco
+    const veio = x / Math.max(0.28, y + 1.25) * 9, faixa = Math.floor(veio), n = hash(faixa * 13 + 3), resto = veio - faixa;
+    let nivel = 1 + (y * 0.55 - x * 0.45) * 1.3 + Math.min(1, -f * 2.5) * 0.7 + (n - 0.5) * 1.4;
+    if (resto < 0.22) nivel -= 1.6; else if (resto > 0.78) nivel += 0.8;
+    if (hash(faixa * 7 + Math.floor(py / (3 + n * 5)) * 31) > 0.84) nivel -= 1;
+    // nó da árvore no lóbulo esquerdo: anéis de crescimento
+    const d = Math.hypot(px - (C.CX - 9), (py - (C.CY - 7)) * 1.25);
+    if (d < 6.5) nivel = d < 1.6 ? 0 : Math.floor(d * 0.8) % 2 ? 1 : 3;
+    let cor = CASCA[Math.max(0, Math.min(4, Math.round(nivel)))];
+    // musgo no alto quando a mata voltou a viver
+    if (green && y > 0.62 && hash(Math.floor(px / 3) * 3 + Math.floor(py / 2) * 57) > 0.42) cor = hash(px + py * 19) > 0.72 ? '#6cb83a' : '#3f7a3a';
+    rect(g, px, py, 1, 1, cor);
+  }
+  return C.sprites[k] = cv2;
+}
+const CORACAO_RACHAS = [
+  [[0, -12], [-1, -7], [1, -2], [-1, 3], [1, 8], [0, 13], [1, 17]],
+  [[1, -2], [6, -5], [10, -4], [14, -7]],
+  [[-1, 3], [-6, 1], [-10, 3], [-14, 1]],
+  [[1, 8], [5, 9], [8, 13]],
+  [[-1, -7], [-3, -11]],
+  [[0, 13], [-4, 12]],
+];
+// [início x, y, curva x, y, fim x, y, grossura] a partir do centro do coração
+const CORACAO_GALHOS = [
+  [-5, -15, -13, -30, -26, -43, 3], [3, -16, 8, -33, 2, -52, 3], [11, -15, 22, -28, 31, -41, 3],
+  [-13, -28, -8, -39, -13, -49, 1], [-19, -35, -28, -36, -35, -33, 1], [7, -33, 14, -42, 16, -52, 1], [22, -29, 31, -28, 38, -30, 1],
+];
 function drawHeart(x, gy, t, green) {
-  const k = (Math.sin(t * 2) + 1) / 2, cy = gy - 42;
-  const glow = green ? '#7af0c0' : '#e0904a', core = green ? ['#1e6a4a', '#3aa070', '#9af0c0'] : ['#5a2010', '#a04a20', '#f0b060'];
-  softGlow(ctx, x, cy, 59 + k * 4, 54 + k * 4, glow, 0.25 + k * 0.12);
-  // raízes: saem do chão, abraçam a semente e se fecham por cima
-  const roots = [[-34, 0, -24, -22, -10, -40], [-20, 0, -16, -26, -6, -50], [34, 0, 24, -22, 10, -40], [20, 0, 16, -26, 6, -50], [-6, 0, -12, -18, -12, -30], [6, 0, 12, -18, 12, -30]];
-  for (const [a, b, c2, d, e, f2] of roots) { const pts = curve(x + a, gy + b, x + c2, gy + d, x + e, gy + f2, 22); strokePath(ctx, pts, 3, '#3a2a40', '#0a0610'); pts.forEach(([px, py], i) => { if (i % 4 === 2) rect(ctx, px, py - 1, 1, 1, green ? '#5ae0b0' : '#c8803a'); }); }
-  ell(ctx, x, cy + 1, 11, 13, '#0a0610'); ell(ctx, x, cy, 10, 12, core[0]); ell(ctx, x - 1, cy - 1, 7, 9, core[1]); ell(ctx, x - 2, cy - 3, 3 + k * 1.5 | 0, 4 + k * 1.5 | 0, core[2]); rect(ctx, x - 4, cy - 7, 2, 2, '#fff8e0');
-  for (let i = 0; i < 3; i++) { const a = t * 1.5 + i * 2.1; rect(ctx, x + Math.cos(a) * 16, cy + Math.sin(a) * 12, 1, 1, glow); }
+  const cy = gy - 36, c = t % 1.7, lub = c < 0.14, dub = c > 0.27 && c < 0.39, cheio = lub || dub;
+  const pulso = Math.max(0, 1 - c / 0.5) * 0.7 + Math.max(0, 1 - Math.abs(c - 0.3) / 0.25) * 0.5;
+  const glow = green ? '#7af0c0' : '#e0904a', seiva = green ? ['#1e6a4a', '#5ae0a0', '#d0ffe8'] : ['#6a2410', '#e07a2a', '#ffe0a0'];
+  const folhas = green ? ['#2f7a2a', '#6cb83a', '#c8f070'] : ['#4a1c10', '#8a3c1a', '#c87830'];
+  softGlow(ctx, x, cy, 56 + pulso * 8, 52 + pulso * 8, glow, 0.2 + pulso * 0.2);
+  const casca = green ? '#3a4a34' : '#4a2a2c', luz = green ? '#5ae0b0' : '#c8803a';
+  // galhos atrás do coração, com folhas nas pontas
+  for (const [a, b, c2, d, e, f, th] of CORACAO_GALHOS) {
+    const pts = curve(x + a, cy + b, x + c2, cy + d, x + e, cy + f, 18);
+    strokePath(ctx, pts, 1, casca, '#0a0610');
+    if (th > 1) strokePath(ctx, pts.slice(0, 13), 2, casca, '#0a0610');
+    if (th > 2) strokePath(ctx, pts.slice(0, 7), 3, casca, '#0a0610');
+    const folhagem = green ? 12 : 4;
+    for (let i = 0; i < folhagem; i++) {
+      const h1 = hash(e * 31 + f + i * 7), h2 = hash(e + f * 17 + i * 3), bal = Math.round(Math.sin(t * 1.6 + h1 * 6) * 0.8);
+      const lx = x + e + (h1 - 0.5) * 16 + bal, ly = cy + f + (h2 - 0.5) * 11;
+      rect(ctx, lx - 1, ly - 1, 4, 3, '#0a0610'); rect(ctx, lx, ly, 2, 1, folhas[i % 3]); rect(ctx, lx + 1, ly - 1 + i % 2, 1, 1, folhas[(i + 1) % 3]);
+    }
+  }
+  // a ponta do coração vira um tronco curto; as raízes descem coladas nele e só se abrem rente ao chão
+  for (let yy = cy + 12; yy < gy; yy++) {
+    const u = (yy - cy - 12) / (gy - cy - 12), mw = Math.round(5 + u * u * 7);
+    rect(ctx, x - mw - 1, yy, mw * 2 + 2, 1, '#0a0610');
+    for (let i = -mw; i < mw; i++) { const n = hash(Math.floor((i / (mw + 1)) * 5) * 11); rect(ctx, x + i, yy, 1, 1, n > 0.62 ? (green ? '#26362a' : '#38181c') : i < -mw / 3 ? casca : green ? '#2c3a28' : '#3c2022'); }
+  }
+  const raizes = [[-38, -7, 2], [-25, -5, 3], [-14, -3, 3], [14, 3, 3], [25, 5, 3], [38, 7, 2]];
+  for (const [a, sai, th] of raizes) { const pts = curve(x + sai, gy - 13, x + a * 0.2, gy - 1, x + a, gy, 20); strokePath(ctx, pts.slice(12), Math.max(1, th - 1), casca, '#0a0610'); strokePath(ctx, pts.slice(0, 13), th, casca, '#0a0610'); pts.forEach(([px, py], i) => { if (i % 6 === 3) rect(ctx, px, py - 1, 1, 1, luz); }); }
+  // o corpo: bate em dois tempos, inflando um pixel
+  ctx.drawImage(coracaoSprite(green, cheio), Math.round(x) - CORACAO.CX, cy - CORACAO.CY, CORACAO.W, CORACAO.H);
+  // seiva nas rachaduras: a luz sai do meio e corre até a ponta de cada uma
+  const quente = cheio ? seiva[2] : seiva[1];
+  for (const r of CORACAO_RACHAS) for (let i = 1; i < r.length; i++) line(ctx, x + r[i - 1][0], cy + r[i - 1][1], x + r[i][0], cy + r[i][1], '#0a0610', 2);
+  for (const r of CORACAO_RACHAS) for (let i = 1; i < r.length; i++) line(ctx, x + r[i - 1][0], cy + r[i - 1][1], x + r[i][0], cy + r[i][1], i === 1 ? quente : seiva[pulso > 0.35 ? 1 : 0]);
+  const corre = Math.min(1, c / 0.7);
+  if (corre < 1) for (const r of CORACAO_RACHAS) { const p = r[Math.min(r.length - 1, Math.floor(corre * r.length))]; rect(ctx, x + p[0], cy + p[1], 1, 1, seiva[2]); }
+  softGlow(ctx, x, cy + 1, 13 + pulso * 7, 15 + pulso * 7, glow, 0.25 + pulso * 0.4);
+  // um cipó sobe do tronco pela borda direita do coração
+  { const pts = curve(x + 6, cy + 18, x + 22, cy + 8, x + 16, cy - 15, 20); strokePath(ctx, pts, 1, green ? '#4a7a3a' : '#5a3224', '#0a0610'); pts.forEach(([px, py], i) => { if (i % 5 === 2) rect(ctx, px + (i % 2 ? 1 : -2), py, 2, 1, folhas[1]); }); }
+  // fagulhas de seiva sobem a cada batida
+  for (let i = 0; i < 5; i++) { const u = (t * 0.35 + i * 0.2) % 1; ctx.globalAlpha = 1 - u; rect(ctx, x + Math.sin(i * 2.4 + t) * (8 + i * 3), cy - 6 - u * 40, 1, 1, glow); }
+  ctx.globalAlpha = 1;
 }
 // raízes que brotam do chão (especial das sementes e dissolução): rachadura, depois raízes curvas com folhas
 function drawRootBurst(h) {

@@ -56,9 +56,12 @@ function relicIcon(id) {
 }
 function inventoryHTML() {
   const items = (G.save.items || []).filter(id => RELICS[id]);
-  const rows = items.length ? items.map(id => `<div class="relic"><img src="${relicIcon(id)}" alt=""><span><b>${RELICS[id].n}</b><small>${RELICS[id].d}</small></span></div>`).join('') : '<p>Nenhum item ainda. Abra os baús pelo caminho.</p>';
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  // espaços vazios completam a grade, de seis em seis
+  const total = Math.max(18, Math.ceil(items.length / 6) * 6);
+  const rows = items.map(id => `<button class="btn slot" aria-label="${esc(RELICS[id].n)}" data-n="${esc(RELICS[id].n)}" data-d="${esc(RELICS[id].d)}"><img src="${relicIcon(id)}" alt=""></button>`).join('') + '<div class="slot"></div>'.repeat(total - items.length);
   const parts = PARTS.lanca_antiga, have = parts.filter(p => items.includes(p)).length;
   const prog = items.includes('lanca_antiga') ? '' : `<p style="margin-top:8px">Lança dos Antigos: ${have}/3 partes</p>`;
   const m = statMax();
-  return `<h2>Inventário</h2><div class="stats"><span>Vida</span><span class="v">${m.hp}</span><span>Energia</span><span class="v">${m.st}</span><span>Dano</span><span class="v">×${dmgMul().toFixed(2)}</span><span>Goles de cura</span><span class="v">${m.flasks}</span></div><div class="relics">${rows}</div>${prog}<div class="btns"><button class="btn" data-act="back">Voltar</button></div>`;
+  return `<div class="mochila"><h2>Inventário</h2><div class="stats"><span>Vida</span><span class="v">${m.hp}</span><span>Energia</span><span class="v">${m.st}</span><span>Dano</span><span class="v">×${dmgMul().toFixed(2)}</span><span>Goles de cura</span><span class="v">${m.flasks}</span></div><div class="slots">${rows}</div><div class="slotinfo"></div>${items.length ? '' : '<p style="margin-top:8px">Nenhum item ainda. Abra os baús pelo caminho.</p>'}${prog}<div class="btns"><button class="btn" data-act="back">Voltar</button></div></div>`;
 }

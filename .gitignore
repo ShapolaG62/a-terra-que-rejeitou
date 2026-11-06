@@ -6,3 +6,7 @@ node_modules/
 /Nova pasta/
 /Nova pasta (2)/
 /Nova pasta - Copia/
+
+# Instalador gerado por instalador\construir.ps1
+/dist/
+/instalador/obra/

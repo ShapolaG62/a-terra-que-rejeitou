@@ -376,8 +376,8 @@ function musicTick() {
 // ---------- Save ----------
 const SAVE_KEY = 'terra-que-rejeitou-v1';
 function newSave() {
-  return { act: 0, mem: 0, vig: 0, forc: 0, fol: 0, forms: ['espirito'], form: 'espirito', echoes: [], harmony: {}, frag: 0, answer: null, fire: null, drop: null, done: false, seen: {}, lit: {}, opened: {}, bonusFlask: 0, items: [], cold: false, ev: {}, gates: [], murals: [], seenGates: [], sub: null };
+  return { tempo: 0, mortes: 0, act: 0, mem: 0, vig: 0, forc: 0, fol: 0, forms: ['espirito'], form: 'espirito', echoes: [], harmony: {}, frag: 0, answer: null, fire: null, drop: null, done: false, seen: {}, lit: {}, opened: {}, bonusFlask: 0, items: [], cold: false, ev: {}, gates: [], murals: [], seenGates: [], sub: null };
 }
-function loadSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); return s && typeof s.act === 'number' ? Object.assign(newSave(), s) : null; } catch (e) { return null; } }
+function loadSave() { try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); return s && typeof s.act === 'number' ? Object.assign(newSave(), s, s.mortes == null ? { semRegistro: true } : null) : null; } catch (e) { return null; } }
 function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(G.save)); } catch (e) {} }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }

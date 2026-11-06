@@ -275,7 +275,7 @@ async function journeyMapinguariDown(B) {
   }
   SFX.echo();
   for (let i = 0; i < 18; i++) {
-    B.alpha = 1 - i / 18;
+    CHEFES.sai(B, i / 17);
     part(B.x + rnd(-18, 18), B.y - rnd(8, B.h), rnd(-12, 12), -28, 1.2, outcome === 'poupar' ? '#bad28a' : '#ab9e94');
     await wait(0.045);
   }
@@ -354,15 +354,31 @@ function drawJourneyBridge(s) {
   for (const x of [330, 377]) { rect(ctx, x, s.y - 7, 2, 11, '#684b2d'); rect(ctx, x - 1, s.y - 4, 4, 1, '#c0a06a'); }
   rect(ctx, s.x, s.y + 3, s.w, 1, '#3a2a1d');
 }
+// Placa de madeira apontando o caminho; o tamanho acompanha o nome do lugar.
+function drawPlaca(x, gy, nome) {
+  const w = pxW(nome) + 6, x0 = Math.round(x - w / 2) - 2, topo = gy - 29;
+  rect(ctx, x - 1, topo + 8, 2, 29 - 8, '#6c4c2b'); rect(ctx, x - 1, topo + 8, 1, 29 - 8, '#8a6a3e');
+  rect(ctx, x - 2, gy - 1, 4, 1, '#3a2a18');
+  rect(ctx, x0 - 1, topo, w + 2, 11, '#2b2419');
+  for (let i = 0; i < 5; i++) rect(ctx, x0 + w + 1 + i, topo + i + 1, 1, 9 - i * 2, '#2b2419');
+  rect(ctx, x0, topo + 1, w, 9, '#937044');
+  for (let i = 0; i < 4; i++) rect(ctx, x0 + w + i, topo + 2 + i, 1, 7 - i * 2, '#937044');
+  rect(ctx, x0, topo + 1, w, 1, '#b08c58');
+  drawPx(nome, x0 + 3, topo + 2, { col: '#fff0c4', col2: '#e1c286' });
+}
+// As saídas abertas de cada mapa ganham placa assim que ficam disponíveis.
+function drawPlacas(cx) {
+  const L = G.lvl, id = L.id, c = typeof COMPANIONS !== 'undefined' && COMPANIONS[id];
+  const poe = (x, nome) => { if (x > cx - 60 && x < cx + W + 60) drawPlaca(x, groundY(x), nome); };
+  if (c && c.exitX && companionOutcome(id) && G.save.act === c.act && !G.save.sub && (id !== 'cerrado' || SV().ev.boitata)) poe(c.exitX, { cerrado: 'Pantanal', pantanal: 'Caatinga', caatinga: 'Mata Atlântica' }[id]);
+  for (const e of L.caveExits || []) if (!e.need || gateOpen(e.need)) poe(e.x - 28, 'Cerrado');
+  for (const d of L.doors) if (d.placa && (!d.need || gateOpen(d.need)) && (!d.cond || d.cond())) poe(d.x, d.placa);
+}
 function drawJourneyProp(p, t, gy) {
   if (p.kind.startsWith('journeyRegional')) return drawCompanionProp(p, t, gy);
   const x = p.x, outcome = journeyOutcome();
   if (p.kind === 'journeyExit') {
-    rect(ctx, x - 1, gy - 25, 2, 25, '#6c4c2b');
-    rect(ctx, x - 22, gy - 29, 42, 11, '#2b2419');
-    rect(ctx, x - 21, gy - 28, 40, 9, '#937044');
-    for (let i = 0; i < 5; i++) rect(ctx, x + 19 + i, gy - 28 + i, 1, 9 - i * 2, '#937044');
-    drawPx('Cerrado', x - 1, gy - 27, { align: 'center', col: '#fff0c4', col2: '#e1c286' });
+    drawPlaca(x, gy, 'Cerrado');
   } else if (p.kind === 'journeyStream') {
     rect(ctx, 330, GY + 1, 48, 9, '#285758');
     for (let i = 0; i < 8; i++) rect(ctx, 332 + (i * 13 + t * 8) % 43, GY + 2 + i % 6, 3 + i % 3, 1, i % 2 ? '#729c8a' : '#3d7c79');

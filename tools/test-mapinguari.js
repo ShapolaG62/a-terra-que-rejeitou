@@ -23,7 +23,7 @@ function game() {
   };
   const sandbox = vm.createContext({
     ctx, I: { down: {}, pressed: {} },
-    VFX: new Proxy({}, { get: () => () => {} }), SFX: new Proxy({}, { get: () => () => {} }),
+    CONQ: new Proxy({}, { get: () => () => {} }), VFX: new Proxy({}, { get: () => () => {} }), SFX: new Proxy({}, { get: () => () => {} }),
     setTimeout() { throw new Error('Ataques do Mapinguari devem usar o tempo do jogo.'); },
     onBossDown() {},
   });
@@ -31,7 +31,7 @@ function game() {
   vm.runInContext(core.slice(core.indexOf('const W'), core.indexOf('const cv')) +
     core.slice(core.indexOf('const clamp'), core.indexOf('// ---------- Layout')) +
     core.slice(core.indexOf('function newSave()'), core.indexOf('function loadSave()')), sandbox);
-  for (const file of ['itens.js', 'art.js', 'world.js', 'bosses.js', 'beasts.js']) {
+  for (const file of ['itens.js', 'art.js', 'world.js', 'bosses.js', 'beasts.js', 'chefes.js']) {
     vm.runInContext(source(file), sandbox, { filename: file });
   }
   vm.runInContext(`

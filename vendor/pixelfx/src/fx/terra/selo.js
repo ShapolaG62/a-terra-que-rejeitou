@@ -40,7 +40,7 @@ export function create(o) {
       if (t < 0.22) {
         const u = t / 0.22, a = 1 - u, w = 1 + (1 - u) * 2;
         for (let i = 0; i + 1 < tear.length; i++) { const [x0, y0] = tear[i], [x1, y1] = tear[i + 1]; p.beam(x0, y0, x1, y1, w, u < 0.4 ? C[4] : C[3], a); p.glowLine(x0, y0, x1, y1, 8, C[2], 0.35 * a); }
-        if (t < 0.08) sparkle(p, tear[7][0], tear[7][1], 15, C[4], C[3]);
+        if (t < 0.08) { const m = tear[tear.length >> 1]; sparkle(p, m[0], m[1], 15, C[4], C[3]); }
       }
       const fa = clamp(3.2 - t);
       for (const f of leaves) {

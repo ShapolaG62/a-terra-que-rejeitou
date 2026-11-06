@@ -5,10 +5,13 @@
 const UI = { dialog: false, menu: false, card: false };
 let DQ = null;
 const dEl = $('#dialog'), dWho = dEl.querySelector('.who'), dTxt = dEl.querySelector('.txt'), dCh = dEl.querySelector('.choices'), dNx = dEl.querySelector('.nx');
+// quem ainda esperava uma resposta é liberado: nenhuma cena pode ficar parada para sempre
+function liberaFala() { if (!DQ) return; const r = DQ.res, c = DQ.choices; DQ = null; r(c ? Math.max(0, c.findIndex(o => !o.disabled)) : undefined); }
 function say(who, text) {
+  liberaFala();
   convSpeaker(who);
   return new Promise(res => {
-    UI.dialog = true; dEl.hidden = false; layout();
+    UI.dialog = true; CONV.fundoOk = false; if (dEl.hidden) { dEl.hidden = false; layout(); }
     dWho.textContent = who && who !== 'Espírito' ? who : (who === 'Espírito' ? 'Espírito' : '');
     dTxt.classList.toggle('narr', !who || who === 'Espírito');
     dCh.innerHTML = ''; dNx.hidden = true;
@@ -16,9 +19,10 @@ function say(who, text) {
   });
 }
 function choose(text, opts, who) {
+  liberaFala();
   convSpeaker(who);
   return new Promise(res => {
-    UI.dialog = true; dEl.hidden = false; layout();
+    UI.dialog = true; CONV.fundoOk = false; if (dEl.hidden) { dEl.hidden = false; layout(); }
     dWho.textContent = who || ''; dTxt.classList.toggle('narr', !who); dTxt.textContent = text; dNx.hidden = true;
     dCh.innerHTML = '';
     DQ = { res, full: text, n: text.length, typing: false, choices: opts, sel: opts.findIndex(o => !o.disabled), t0: G.rt };
@@ -34,13 +38,17 @@ function choose(text, opts, who) {
 }
 function markChoice() { [...dCh.children].forEach((b, i) => b.classList.toggle('sel', i === DQ.sel)); }
 function pickChoice(i) { if (!DQ || !DQ.choices || DQ.choices[i].disabled) return; const r = DQ.res; SFX.ui(); DQ = null; dCh.innerHTML = ''; r(i); }
-function closeDialog() { DQ = null; UI.dialog = false; dEl.hidden = true; CONV.partner = null; }
+function closeDialog() { DQ = null; UI.dialog = false; dEl.hidden = true; CONV.partner = null; CONV.fundoOk = false; }
 // Conversa com NPC (ou guardião): os dois aparecem grandes, o espírito à esquerda e quem conversa à direita;
 // quem está falando fica iluminado e mexe ao falar, o outro fica na sombra
 const RETRATO = { 'Cecília': 'arqueira', 'Bento': 'canoeiro', 'Rosa': 'lanceira', 'Celina': 'ancia', 'Davi': 'cacador', 'Lia': 'mestraA', 'Nina': 'nina', 'Caçador': 'cacador', 'Mestra da zarabatana': 'mestraA', 'Mestra do arco': 'arqueira', 'Velho canoeiro': 'canoeiro', 'Lanceira da cabaça': 'lanceira', 'Anciã das sementes': 'ancia', 'Anciã': 'ancia' };
 const RETRATO_BOSS = { 'Mapinguari': 'mapinguari', 'Capelobo': 'capelobo', 'Pai do Mato': 'paidomato', 'Labatut': 'labatut', 'Corpo-seco': 'corposeco' };
 const CONV = { partner: null, who: null, t0: 0, tw: 0 };
 const [convC, convX] = mk(90, 100);
+const [convBC, convBX] = mk(300, 260);
+const [fundoC, fundoX] = mk(W, H);
+// quem não está falando fica na sombra: uma camada escura só sobre o desenho
+function sombraRetrato(x, w, h) { x.globalCompositeOperation = 'source-atop'; x.globalAlpha = 0.58; x.fillStyle = '#07050a'; x.fillRect(0, 0, w, h); x.globalAlpha = 1; x.globalCompositeOperation = 'source-over'; }
 function convSpeaker(who) {
   if (RETRATO[who] || (RETRATO_BOSS[who] && BOSSES[RETRATO_BOSS[who]])) { if (!CONV.partner) CONV.t0 = G.rt; if (CONV.partner !== who) CONV.partner = who; }
   if (CONV.who !== who) CONV.tw = G.rt;
@@ -52,18 +60,17 @@ function drawConversation() {
   const base = L.portrait ? H - 4 : H - 6, lx = Math.round(W * 0.21 - (1 - e) * 140), rx = Math.round(W * 0.79 + (1 - e) * 140);
   // o cenário escurece, com uma faixa de luz no chão
   ctx.globalAlpha = 0.68 * e; rect(ctx, 0, 0, W, H, '#07050a'); ctx.globalAlpha = 1;
-  const glow = (x, on) => { const sw = clamp((t - CONV.tw) / 0.25, 0, 1), k = on ? sw : 1 - sw * 0.4; if (!on && k <= 0.6) return; const g = ctx.createRadialGradient(x, base - 70, 4, x, base - 70, 90); g.addColorStop(0, on ? '#f2c14e38' : '#8a7ab018'); g.addColorStop(1, '#f2c14e00'); ctx.globalAlpha = e * (on ? k : 0.5); ctx.fillStyle = g; ctx.fillRect(x - 90, base - 160, 180, 180); ctx.globalAlpha = 1; };
+  const glow = (x, on) => { const sw = clamp((t - CONV.tw) / 0.25, 0, 1), k = on ? sw : 1 - sw * 0.4; if (!on && k <= 0.6) return; softGlow(ctx, x, base - 70, 90, 90, on ? '#f2c14e' : '#8a7ab0', e * (on ? k * 0.3 : 0.1)); };
   glow(lx, me); glow(rx, them);
   if (L.portrait) for (const x of [lx, rx]) { ctx.globalAlpha = 0.5 * e; ell(ctx, x, base, 34, 4, '#000'); ctx.globalAlpha = 1; }
   // Retratos em resolução fina, mantendo o tamanho e a posição da conversa.
   convX.clearRect(0, 0, 90, 100);
   drawHuman(convX, 45, 96 - (me ? talking : 0), 1, { kind: 'idle', t }, playerSpec(G.P.form));
+  if (!me && them) sombraRetrato(convX, 90, 100);
   ctx.imageSmoothingEnabled = false;
-  ctx.filter = me || !them ? 'none' : 'brightness(0.45) saturate(0.7)';
-  ctx.globalAlpha = e; ctx.drawImage(convC, lx - 135, base - 288, 270, 300); ctx.globalAlpha = 1; ctx.filter = 'none';
+  ctx.globalAlpha = e; ctx.drawImage(convC, lx - 135, base - 288, 270, 300);
   // quem conversa: gente do povo ampliada 3×, guardião ampliado 2×
-  ctx.filter = them || !me ? 'none' : 'brightness(0.45) saturate(0.7)';
-  ctx.globalAlpha = e;
+  const quieto = !them && me;
   if (RETRATO[partner]) {
     convX.clearRect(0, 0, 90, 100);
     convX.save(); convX.translate(45, 96 - (them ? talking : 0));
@@ -71,15 +78,24 @@ function drawConversation() {
     convX.scale(scale, scale);
     drawHuman(convX, 0, 0, -1, { kind: 'idle', t }, NPC[RETRATO[partner]]);
     convX.restore();
+    if (quieto) sombraRetrato(convX, 90, 100);
     ctx.drawImage(convC, rx - 135, base - 288, 270, 300);
   } else {
-    const k = RETRATO_BOSS[partner], live = G.boss && G.boss.kind === k ? G.boss : null;
-    const B = Object.assign({ kind: k, t, st: 'idle', mood: 'povo', hits: 0 }, live || {}, { x: 0, y: 0, f: -1, flash: 0 });
-    ctx.save(); ctx.translate(rx, base - (them ? talking * 2 : 0)); ctx.scale(2, 2);
-    try { BOSSES[k].draw(B); } catch (err) {}
-    ctx.restore();
+    // o guardião vai para uma tela própria; calado, ele só é redesenhado a cada três quadros
+    if (!quieto || CONV.bossDe !== partner || (CONV.vez = (CONV.vez || 0) + 1) % 3 === 0) {
+      const k = RETRATO_BOSS[partner], live = G.boss && G.boss.kind === k ? G.boss : null;
+      const B = Object.assign({ kind: k, t, st: 'idle', mood: 'povo', hits: 0 }, live || {}, { x: 0, y: 0, f: -1, flash: 0 });
+      const real = ctx, alpha = ctx.globalAlpha;
+      convBX.clearRect(0, 0, 300, 260);
+      ctx = convBX; ctx.save(); ctx.translate(150, 250 - (them ? talking * 2 : 0)); ctx.scale(2, 2);
+      try { BOSSES[k].draw(B); } catch (err) {}
+      ctx.restore(); ctx = real; ctx.globalAlpha = alpha;
+      if (quieto) sombraRetrato(convBX, 300, 260);
+      CONV.bossDe = partner;
+    }
+    ctx.drawImage(convBC, rx - 150, base - 250, 300, 260);
   }
-  ctx.globalAlpha = 1; ctx.filter = 'none';
+  ctx.globalAlpha = 1;
 }
 async function talk(lines) { for (const [w, t] of lines) await say(w, t); closeDialog(); }
 dEl.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; advanceDialog(); });
@@ -89,22 +105,23 @@ function advanceDialog() {
   const r = DQ.res; DQ = null; r();
 }
 function dialogTick(dt) {
-  if (!DQ) return;
+  if (!DQ) { closeDialog(); return; }
   if (G.rt - DQ.t0 < 0.2) for (const a of ['confirm', 'attack', 'interact']) I.pressed[a] = false;
   if (DQ.choices) {
     if (I.pressed.up || I.pressed.down) { const n = DQ.choices.length; let s = DQ.sel; do { s = (s + (I.pressed.down ? 1 : n - 1)) % n; } while (DQ.choices[s].disabled); DQ.sel = s; markChoice(); SFX.ui(); }
     if (I.pressed.confirm || I.pressed.attack || I.pressed.interact) pickChoice(DQ.sel);
     return;
   }
-  if (DQ.typing) { DQ.n += dt * 60; if (DQ.n >= DQ.full.length) { DQ.n = DQ.full.length; DQ.typing = false; dNx.hidden = false; } dTxt.textContent = DQ.full.slice(0, Math.floor(DQ.n)); }
+  if (DQ.typing) { const antes = Math.floor(DQ.n); DQ.n += dt * 60; if (DQ.n >= DQ.full.length) { DQ.n = DQ.full.length; DQ.typing = false; dNx.hidden = false; dTxt.textContent = DQ.full; } else if (Math.floor(DQ.n) !== antes || antes === 0) dTxt.textContent = DQ.full.slice(0, Math.floor(DQ.n)); }
   if (I.pressed.confirm || I.pressed.attack || I.pressed.interact) advanceDialog();
 }
 function wait(s) { return new Promise(res => G.waits.push({ t: s, res })); }
-function waitUntil(fn) { return new Promise(res => G.waits.push({ fn, res })); }
+function waitUntil(fn, limite = 12) { const t0 = G.rt; return new Promise(res => G.waits.push({ fn: () => fn() || G.rt - t0 > limite, res })); }
 async function scene(fn) {
   G.lock++; G.interact = null; $('#prompt').hidden = true;
   $('#touch [data-a="interact"]').classList.remove('ready');
-  try { await fn(); } finally { G.lock = Math.max(0, G.lock - 1); closeDialog(); }
+  // só fecha o diálogo se ninguém estiver esperando resposta nele
+  try { await fn(); } finally { G.lock = Math.max(0, G.lock - 1); if (!DQ) closeDialog(); }
 }
 
 let toastT = null;
@@ -141,7 +158,15 @@ function closeMenu(act) { const r = UI.menu.res; UI.menu = false; mEl.hidden = t
 function navMark(root, i) { const bs = [...root.querySelectorAll('.btn:not([hidden])')]; bs.forEach((b, k) => b.classList.toggle('sel', k === i)); return bs; }
 function navTick(root, state) {
   const bs = [...root.querySelectorAll('.btn:not([hidden])')]; if (!bs.length) return;
-  const vr = bs[state.sel] && bs[state.sel].querySelector('input[data-vol]');
+  const atual = bs[state.sel];
+  if (atual && atual.classList && atual.classList.contains('slot') && (I.pressed.left || I.pressed.right || I.pressed.up || I.pressed.down)) {
+    const slots = bs.filter(b => b.classList.contains('slot')), i = slots.indexOf(atual);
+    const cols = Math.max(1, root.querySelector('.slots') ? getComputedStyle(root.querySelector('.slots')).gridTemplateColumns.split(' ').length : 1);
+    let alvo = I.pressed.left ? slots[i - 1] : I.pressed.right ? slots[i + 1] : I.pressed.up ? slots[i - cols] : slots[i + cols];
+    if (!alvo) alvo = I.pressed.up || I.pressed.left ? bs[(bs.indexOf(slots[0]) + bs.length - 1) % bs.length] : bs[bs.indexOf(slots[slots.length - 1]) + 1] || bs[0];
+    state.sel = bs.indexOf(alvo); navMark(root, state.sel); SFX.ui(); return;
+  }
+  const vr = atual && atual.querySelector('input[data-vol]');
   if ((I.pressed.left || I.pressed.right) && vr) { const k = vr.dataset.vol; audioInit(); setVolume(k, AU[k] + (I.pressed.right ? 0.1 : -0.1)); (k === 'sfx' ? SFX.hit : SFX.ui)(); }
   if (I.pressed.up || I.pressed.down) { state.sel = (state.sel + (I.pressed.down ? 1 : bs.length - 1)) % bs.length; navMark(root, state.sel); bs[state.sel].scrollIntoView({ block: 'nearest' }); SFX.ui(); }
   if (I.pressed.confirm || I.pressed.attack || I.pressed.interact) { const b = bs[state.sel]; if (b && !b.disabled) b.click(); }
@@ -244,14 +269,18 @@ async function pauseMenu() {
   for (;;) {
     const a = await menu(`<h2>Pausa</h2><p>${G.lvl.name}</p><div class="btns">
       <button class="btn" data-act="back">Continuar</button>
-      ${G.exploring ? '<button class="btn" data-act="explore">Exploração temporária · escolher fase</button>' : ''}
       <button class="btn" data-act="s">Espírito</button><button class="btn" data-act="itens">Inventário</button>
       <button class="btn" data-act="j">Diário <small>${G.save.echoes.length}/6 ecos</small></button>
+      <button class="btn" data-act="conq">Conquistas</button>
+      <button class="btn" data-act="est">Estatísticas <small>${CONQ.tempoTxt(G.save.tempo)}</small></button>
       <button class="btn" data-act="k">Controles</button>
+      <button class="btn" data-act="explore">Exploração temporária <small>${G.exploring ? 'ligada' : 'sem dano · não salva'}</small></button>
       <button class="btn" data-act="som">Som <small>${AU.on ? 'ligado' : 'desligado'} · ${Math.round(AU.vol * 100)}%</small></button>
       <button class="btn" data-act="t">Voltar ao título</button></div>`);
     if (a === 'back') break;
-    if (a === 'explore') { await explorationMenu(); break; }
+    if (a === 'explore') { const era = G.exploring; if (!era) writeSave(); G.exploring = true; const foi = await explorationMenu(); if (foi) break; G.exploring = era; continue; }
+    if (a === 'conq') await menu(CONQ.conquistasHTML());
+    if (a === 'est') await menu(CONQ.estatisticasHTML(G.save));
     if (a === 's') await menu(statsHTML(false));
     if (a === 'itens') await menu(inventoryHTML());
     if (a === 'j') await menu(journalHTML());
@@ -587,7 +616,9 @@ function restAt(f) {
 function checkTriggers() {
   if (G.arriving || G.cavePassage) return;
   const px = G.P.x + 5;
-  for (const t of G.lvl.triggers) if (!t.done && px > t.x) { t.done = true; scene(t.fn); }
+  // uma cena por vez: as outras disparam quando esta acabar
+  if (G.lock) return;
+  for (const t of G.lvl.triggers) if (!t.done && px > t.x) { t.done = true; scene(t.fn); return; }
 }
 function checkArena() {
   const A = G.lvl.arena;
@@ -612,12 +643,12 @@ function resetArena() {
   G.boss = null; G.dynShade = []; G.heatMul = 1; G.dark = 0; hud.boss.hidden = true; hud.cache = {};
   musicSet(L2.biome);
 }
-function onBossDown(B) { hud.boss.hidden = true; VFX.bossDown(B); scene(() => STORY.bossDown(B)); }
+function onBossDown(B) { hud.boss.hidden = true; VFX.bossDown(B); CONQ.chefe(B.kind); scene(() => STORY.bossDown(B)); }
 
 // ---------- Morte e retorno ----------
 function die() {
   const P = G.P; if (P.state === 'dead') return;
-  P.state = 'dead'; P.hp = 0; G.lock++; SFX.lose(); VFX.death(P);
+  P.state = 'dead'; P.hp = 0; G.lock++; SFX.lose(); VFX.death(P); CONQ.morte();
   if (G.save.mem > 0) { const fell = P.y > GY + 20; G.save.drop = { lvl: G.lvl.id, x: (fell ? P.safe.x : P.x) + 5, y: (fell ? P.safe.y : P.y) + 12, mem: G.save.mem }; }
   G.save.mem = 0; writeSave();
   closeDialog();
@@ -769,7 +800,7 @@ const LEVELS = {
       grantForm('lanca');
       await wait(0.6);
       await talk([['Velho canoeiro', 'O Pai do Mato ainda não enlouqueceu. É o único. Mas ele sabe que você rompeu a Lei.'], ['Velho canoeiro', 'Ele vai querer ver se você merece.']]);
-      hint('<kbd>J</kbd> estocada longa · <kbd>U</kbd> arremesso de lança · na água você anda e pula melhor', '<b>Golpe</b>: estocada longa · <b>Especial</b>: arremesso · na água você anda e pula melhor', 7);
+      hint('<kbd>J</kbd> estocada longa (de longe, o remo joga água) · <kbd>U</kbd> arremesso de lança · na água você anda e pula melhor', '<b>Golpe</b>: estocada longa · <b>Especial</b>: arremesso · na água você anda e pula melhor', 7);
     });
     return L2;
   },
@@ -909,10 +940,9 @@ const STORY = {
   async bossDown(B) {
     const k = B.kind, A = G.lvl.arena;
     musicSet('victory'); G.dark = 0; G.heatMul = 1; G.dynShade = [];
-    await wait(1.2);
+    await wait(CHEFES.espera(k));
     if (k === 'lobo') {
-      for (let i = 0; i < 40; i++) part(B.x + rnd(-12, 12), B.y - rnd(0, 14), rnd(-30, 30), rnd(-60, -10), 1.4, pick(['#1c1622', '#3a3448', '#ffe066']));
-      B.alpha = 0; await wait(0.8);
+      await wait(0.5); B.alpha = 0;
       await talk([['', 'O guardião se desfaz em cinza. Ele não morreu: virou só o medo que ficou. E agora, nem isso.']]);
       G.boss = null; A.cleared = true; resetArena();
       G.auto = 1; await waitUntil(() => G.P.x > 1360); G.auto = 0; G.P.f = 1;
@@ -965,8 +995,7 @@ const STORY = {
     const returnTo = typeof prepareCompanionReturn === 'function' ? prepareCompanionReturn(k) : null;
     // o guardião se desfaz em memória: luz subindo enquanto some
     for (let i = 0; i < 36; i++) {
-      B.alpha = 1 - i / 36;
-      for (let k = 0; k < 4; k++) part(B.x + rnd(-B.w / 2 - 4, B.w / 2 + 4), B.y - rnd(0, B.h), rnd(-10, 10), rnd(-60, -20), 1.6, pick(['#f6e3a6', '#bfe4ff', '#8fe37a', '#efe0c0']), pick([1, 2]), -20);
+      CHEFES.sai(B, i / 35);
       await wait(0.05);
     }
     G.flash = 0.3; G.flashCol = '#f4ecd8'; SFX.echo();
@@ -1008,9 +1037,9 @@ const STORY = {
       let i = 0, lastT = -9;
       await waitUntil(() => {
         const d = Math.abs(G.P.x + 5 - B.x);
-        if (i < lines.length && d < 170 - i * 45 && G.rt - lastT > 1.6) { say('Corpo-seco', lines[i]).then(closeDialog); lastT = G.rt; i++; }
-        return i >= lines.length && G.rt - lastT > 1.2 && d < 30 && G.P.onG;
-      });
+        if (!DQ && i < lines.length && d < 170 - i * 45 && G.rt - lastT > 1.6) { say('Corpo-seco', lines[i]).then(closeDialog); lastT = G.rt; i++; }
+        return !DQ && i >= lines.length && G.rt - lastT > 1.2 && d < 30 && G.P.onG;
+      }, Infinity);
       G.lock++;
       G.P.vx = 0; G.P.state = 'normal'; G.P.f = Math.sign(B.x - G.P.x) || 1;
       await talk([['Corpo-seco', 'Você ainda tem algo que eu nunca tive. Abriu mão da Lei pelos outros.']]);
@@ -1021,7 +1050,11 @@ const STORY = {
         ['Corpo-seco', 'Toma o que sobrou de mim. Devolve pra ela.'],
         ['', 'Ele entrega o próprio espírito à mata.'],
       ]);
-      for (let k = 0; k < 40; k++) { B.y += 0.6; B.alpha = 1 - k / 40; part(B.x + rnd(-6, 6), GY, rnd(-20, 20), rnd(-40, -10), 1, pick(['#6a5a48', '#8fe37a']), 1, 40); await wait(0.05); }
+      // as raízes vêm buscá-lo: a terra o puxa para dentro
+      VFX.play('terra/morte-corposeco', B.x, GY); SFX.boom();
+      await wait(0.5);
+      for (let k = 0; k < 64; k++) { B.fim = k / 63; G.cam.shake = Math.max(G.cam.shake || 0, 1.2); part(B.x + rnd(-12, 12), GY, rnd(-20, 20), rnd(-40, -10), 1, pick(['#6a5a48', '#6a3080', '#8fe37a']), 1, 40); await wait(0.05); }
+      B.alpha = 0;
       G.cam.shake = 8; SFX.boom();
       await talk([['', 'A terra, que o rejeitava, finalmente o aceita.'], ['', 'E essa aceitação reabre o solo.']]);
       G.save.harmony.corposeco = 'aceito';
@@ -1072,6 +1105,7 @@ const STORY = {
   },
 
   async epilogue() {
+    CONQ.fim();
     G.save.done = true; writeSave();
     $('#hud').hidden = true; $('#touch').classList.add('epi');
     musicSet('mata');
@@ -1119,7 +1153,7 @@ const STORY = {
     ]);
     await fade(true);
     G.state = 'card';
-    await showCard('Fim', 'A Terra que Rejeitou', `Ecos encontrados: ${e.length}/6`, 'Mundo fictício, inspirado nos biomas e nos povos do Brasil. Mapinguari, Capelobo, Pai do Mato, Labatut e Corpo-seco vêm de lendas contadas pelo país; o pacto, a Lei antiga e os ecos são criações do jogo. Obrigado por jogar.', 2);
+    await showCard('Fim', 'A Terra que Rejeitou', `Ecos encontrados: ${e.length}/6 · ${CONQ.resumo()}`, 'Mundo fictício, inspirado nos biomas e nos povos do Brasil. Mapinguari, Capelobo, Pai do Mato, Labatut e Corpo-seco vêm de lendas contadas pelo país; o pacto, a Lei antiga e os ecos são criações do jogo. Obrigado por jogar.', 2);
     G.save = newSave(); G.save.done = true; writeSave(); clearSave();
     location.reload();
   },
@@ -1146,17 +1180,24 @@ function renderTitle(t) {
 }
 const titleNav = { sel: 0 };
 function setupTitle() {
+  if (G.teste) { const m = document.createElement('div'); m.textContent = 'MODO DE TESTE'; m.style.cssText = 'position:fixed;top:4px;left:50%;transform:translateX(-50%);z-index:70;pointer-events:none;font-size:12px;padding:1px 6px;color:#1a110b;background:#f2c14e'; document.body.appendChild(m); }
   const s = loadSave();
   const bc = $('#bContinue');
   if (s && !s.done) { bc.hidden = false; bc.innerHTML = `Continuar <small>${CARDS[s.act][0]} · ${CARDS[s.act][1]}</small>`; }
   $('#bKeys').insertAdjacentHTML('afterend', '<button class="btn" id="bSom">Som</button>');
   $('#bSom').onclick = async () => { audioInit(); $('#title').hidden = true; await soundMenu(); $('#title').hidden = false; };
+  $('#bKeys').insertAdjacentHTML('beforebegin', '<button class="btn" id="bConq">Conquistas</button><button class="btn" id="bEst">Estatísticas</button>');
+  const tela = html => async () => { audioInit(); $('#title').hidden = true; await menu(html()); $('#title').hidden = false; };
+  $('#bConq').onclick = tela(() => CONQ.conquistasHTML());
+  $('#bEst').onclick = tela(() => CONQ.estatisticasHTML(loadSave()));
   navMark($('#title'), 0);
   bc.onclick = () => { audioInit(); G.save = s; startGame(false); };
   $('#bNew').onclick = async () => {
     audioInit();
     if (s && !s.done) { $('#title').hidden = true; const a = await menu('<h2>Novo jogo</h2><p>Começar de novo apaga o progresso salvo.</p><div class="btns"><button class="btn" data-act="ok">Começar do início</button><button class="btn" data-act="back">Voltar</button></div>'); if (a !== 'ok') { $('#title').hidden = false; return; } }
-    clearSave(); G.save = newSave(); startGame(true);
+    clearSave(); G.save = newSave();
+    await tocarAbertura();
+    startGame(true);
   };
   $('#bKeys').onclick = async () => { $('#title').hidden = true; await menu(keysHTML()); $('#title').hidden = false; };
 }
@@ -1196,33 +1237,45 @@ function update(dt) {
   checkTriggers(); checkArena(); checkInteract();
 }
 let last = 0;
+// Um erro aqui dentro não pode parar o laço, ou o jogo congela para sempre: perde-se um quadro e segue.
 function frame(ts) {
+  try { quadro(ts); } catch (err) {
+    console.error(err);
+    ctx.setTransform(cv.renderScale, 0, 0, cv.renderScale, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+  requestAnimationFrame(frame);
+}
+function quadro(ts) {
   const dt = Math.min(0.05, (ts - last) / 1000 || 0.016); last = ts;
   pollInput(); musicTick(); journeyAmbience(dt);
   if (I.pressed.debug) G.debug = !G.debug;
   G.rt += dt;
-  for (const w of G.waits.slice()) { if (w.fn ? w.fn() : (w.t -= (UI.dialog || UI.menu ? 0 : dt)) <= 0) { G.waits.splice(G.waits.indexOf(w), 1); w.res(); } }
+  for (const w of G.waits.slice()) { if (w.fn ? w.fn() : (w.t -= (DQ || UI.menu ? 0 : dt)) <= 0) { G.waits.splice(G.waits.indexOf(w), 1); w.res(); } }
   if (G.state === 'intro') introTick();
   else if (UI.card) cardTick();
   else if (UI.menu) navTick(mPanel, UI.menu);
   else if (UI.dialog) dialogTick(dt);
-  else if (G.state === 'title') { if (!$('#title').hidden) navTick($('#title'), titleNav); }
+  else if (G.state === 'title') { if (!$('#title').hidden && !INTRO.veu) navTick($('#title'), titleNav); }
   else if (G.state === 'play') {
     if (I.pressed.pause && !G.lock) pauseMenu();
     else if (I.pressed.inv && !G.lock) openInventory();
     else if (!(G.hitstop > 0)) update(dt);
   } else if (G.state === 'scene') { G.t += dt; }
-  if (G.hitstop > 0) G.hitstop -= dt; else if (!UI.menu && !G.paused) VFX.update(dt);
+  const fundoParado = G.state === 'play' && UI.dialog && CONV.partner && G.rt - CONV.t0 > 0.4 && !G.trans;
+  if (G.hitstop > 0) G.hitstop -= dt; else if (!UI.menu && !G.paused && !(fundoParado && CONV.fundoOk)) VFX.update(dt);
+  if (G.state === 'play' && !UI.menu && !G.paused) CONQ.tick(dt);
   if (G.state === 'play' || G.state === 'scene') {
     if (G.state === 'play' && UI.dialog) { G.t += dt * 0.15; updateParts(dt * 0.3); }
   }
   ctx.clearRect(0, 0, W, H);
   if (G.state === 'title') { ctx.save(); ctx.translate(0, DY); renderTitle(G.rt); ctx.restore(); }
   else if (G.state === 'scene' && G.sceneDraw) { ctx.save(); ctx.translate(0, DY); G.sceneDraw(G.rt); ctx.restore(); }
-  else if (G.lvl && G.P) { renderWorld(); drawHudCanvas(); if (G.state === 'play' && UI.dialog && CONV.partner) drawConversation(); if (G.trans) drawTransition(); }
+  else if (G.lvl && G.P) {
+    if (fundoParado && CONV.fundoOk) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.nativeDrawImage(fundoC, 0, 0); ctx.restore(); }
+    else { renderWorld(); if (fundoParado) { fundoX.save(); fundoX.setTransform(1, 0, 0, 1, 0, 0); fundoX.clearRect(0, 0, fundoC.width, fundoC.height); fundoX.nativeDrawImage(cv, 0, 0); fundoX.restore(); CONV.fundoOk = true; } }
+    drawHudCanvas(); if (G.state === 'play' && UI.dialog && CONV.partner) drawConversation(); if (G.trans) drawTransition(); }
   else { rect(ctx, 0, 0, W, H, '#000'); }
   if (G.state === 'play') updateHud();
-  requestAnimationFrame(frame);
 }
 
 setupTouch();

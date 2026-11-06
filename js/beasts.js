@@ -29,7 +29,7 @@ const BEAST = {
 function beastPose(B) {
   const st = B.st, k = B.kind;
   // derrotado: cambaleia, depois fica de joelhos (o Pai do Mato só se ajoelha)
-  if (st === 'down') return k !== 'paidomato' && B.t - (B.downAt || 0) < 0.6 ? 'stagger' : 'kneel';
+  if (st === 'down') return CHEFES.pose(B);
   if (st === 'intro') return 'roar';
   const M = {
     mapinguari: { walk: 'walk', biteW: 'biteW', bite: 'bite', clawW: 'clawW', claw: 'claw', slamW: 'slamW', slam: 'slam', gasW: 'breath', gas: 'breath', chargeW: 'crouch', charge: 'run', dazed: 'dazed', roar: 'roar', rec: 'idle' },
@@ -296,7 +296,7 @@ function drawBeast(B, D) {
     }
     const hand = arm(Y.sx[1] + lean, shY + 1, aF, fm, true);
     // lamparina pendurada na mão da frente (Pai do Mato)
-    if (D.lantern) { A(hand[0], hand[1] + 2, 1, 3, '#3a2a1a'); blob(hand[0], hand[1] + 9, 4, 5, '#4a2e16'); A(hand[0] - 2, hand[1] + 7, 5, 5, '#ffb84a'); A(hand[0] - 1, hand[1] + 8, 3, 3, '#fff0b0'); for (let i = -3; i <= 3; i += 2) A(hand[0] + i, hand[1] + 5, 1, 9, '#2a1a0c'); lantern = hand; }
+    if (D.lantern) { A(hand[0], hand[1] + 2, 1, 3, '#3a2a1a'); blob(hand[0], hand[1] + 9, 4, 5, '#4a2e16'); A(hand[0] - 2, hand[1] + 7, 5, 5, B.lampOff ? '#3a2a1a' : '#ffb84a'); A(hand[0] - 1, hand[1] + 8, 3, 3, B.lampOff ? '#241810' : '#fff0b0'); for (let i = -3; i <= 3; i += 2) A(hand[0] + i, hand[1] + 5, 1, 9, '#2a1a0c'); lantern = hand; }
     if (D.belly) {
       // boca do ventre: na frente da barriga, abre mais na mordida e no rugido e acompanha o corpo em qualquer pose
       const cx = bellyX + 8, cy = bellyY + 1, oh = clamp(Math.round(2 + mouth * 7), 2, 9);
@@ -330,7 +330,7 @@ function drawBeast(B, D) {
     if (D.amb === 'brasas') for (let i = 0; i < 6; i++) { const p = (t * 0.6 + i / 6) % 1, [mx, my] = P2(-12 + i * 5 + Math.sin(p * 8 + i) * 3, -8 - p * 60); ctx.globalAlpha = a0 * (1 - p); rect(ctx, mx, my, 1, 1 + (i % 2), i % 2 ? '#ff8a3a' : '#ffd27a'); }
     ctx.globalAlpha = a0;
   }
-  if (lantern) { const [lx, ly] = P2(lantern[0], lantern[1] + 9); ctx.globalAlpha = a0 * (0.18 + Math.sin(t * 6) * 0.04); ell(ctx, lx, ly, 20, 17, '#ffb84a'); ctx.globalAlpha = a0 * 0.25; ell(ctx, lx, ly, 8, 7, '#fff0b0'); ctx.globalAlpha = a0; }
+  if (lantern && !B.lampOff) { const [lx, ly] = P2(lantern[0], lantern[1] + 9); ctx.globalAlpha = a0 * (0.18 + Math.sin(t * 6) * 0.04); ell(ctx, lx, ly, 20, 17, '#ffb84a'); ctx.globalAlpha = a0 * 0.25; ell(ctx, lx, ly, 8, 7, '#fff0b0'); ctx.globalAlpha = a0; }
   if (pose === 'dazed') drawStars(x + f * 8 * S, y - 60 * S, t);
 }
 
@@ -406,17 +406,6 @@ function drawBossFx() {
   }
   ctx.globalAlpha = 1;
 }
-// efeitos disparados quando o chefe entra em certos estados
-const FX_ENTER = {
-  bite: B => bossFx('crescent', B.x + B.f * B.w * 0.7, B.y - B.h * 0.5, B.f, { r: 20 }),
-  claw: B => bossFx('crescent', B.x + B.f * B.w * 0.6, B.y - B.h * 0.55, B.f, { r: 18 }),
-  staff: B => bossFx('claw', B.x + B.f * 10, B.y - 34, B.f),
-  slash: B => bossFx('claw', B.x + B.f * 12, B.y - 36, B.f),
-  scratch: B => B.kind === 'corposeco' ? bossFx('crescent', B.x + B.f * 26, B.y - 40, B.f, { r: 26, col: '#6a5a3a', col2: '#e8d8b0' }) : bossFx('crescent', B.x + B.f * 14, B.y - 24, B.f, { r: 14, col: '#6a5a3a', col2: '#e8d8b0' }),
-  ambush: B => bossFx('crescent', B.x + B.f * 14, B.y - 22, B.f, { r: 16 }),
-  howl: B => bossFx('ring', B.x, B.y - 30, B.f, { r: 140 }),
-};
-
 // liga os desenhos novos aos chefes e aumenta o tamanho de quem ficou pequeno perto das pranchas
 for (const k of Object.keys(BEAST)) BOSSES[k].draw = B => drawBeast(B, BEAST[k]);
 BOSSES.corposeco.draw = drawCorpoSeco;

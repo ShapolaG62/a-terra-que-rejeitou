@@ -410,7 +410,6 @@ function drawCaveRope(e) {
   line(ctx, e.x, -DY, e.x, e.y - 3, '#806346', 2);
   for (let y = -DY; y < e.y - 3; y += 8) rect(ctx, e.x - 2, y, 4, 1, '#c8ab79');
   rect(ctx, e.x - 9, e.y - 1, 18, 1, '#927c5c');
-  drawPx('Subir', e.x + 8, e.y - 50, { col: '#e4d7b6', col2: '#9b8d72' });
 }
 function drawCaveFront(L, t) {
   const P = G.P;
@@ -854,7 +853,7 @@ function breakSupport(B, s) {
     go(B, 'idle', 0.8); B.x = clamp(B.x, last.x - 140, last.x + 140);
   }
   if (B.chains === 0) {
-    go(B, 'freed', 999); B.contact = 0; G.projs = []; G.hazards = [];
+    CONQ.chefe('boitata'); go(B, 'freed', 999); B.contact = 0; G.projs = []; G.hazards = [];
     for (const e of G.ents) if (e.type === 'raizes') e.hp = 0;
     scene(() => STORY.boitataFreed(B));
   }
@@ -1082,7 +1081,7 @@ LEVELS.gruta = function () {
   const L2 = LV({ act: 2, biome: 'gruta', parent: 'cerrado', name: 'Cerrado — Gruta dos Antigos', w: 3000, start: 96, cave: true });
   L2.caveExits = [{ x: 56, y: GY }, { x: 2970, y: GY, need: 'gruta_saida' }];
   // 1 · Fenda das Raízes (entrada pelo Cerrado: luz que desce pela fenda)
-  L2.g(0, 420).light(50, 10, 80).light(60, 80, 60).hv(90).hv(300).f(210, 'g1');
+  L2.g(0, 420).light(50, 10, 80).light(60, 80, 60).hv(90).hv(300).f(210, 'g1').mural(350, 'm1');
   L2.tr(110, async () => {
     if (SV().ev.grutaIn) return; SV().ev.grutaIn = 1;
     G.cam.shake = 3; SFX.boom(); for (let i = 0; i < 20; i++) part(rnd(G.cam.x, G.cam.x + W), 0, 0, rnd(20, 60), 2, '#5a4a3e', 1, 120);
@@ -1090,13 +1089,12 @@ LEVELS.gruta = function () {
     hint('A <b>tocha</b> ilumina e desperta as pinturas · segure <kbd>↓</kbd> para andar em <b>silêncio</b>', 'A <b>tocha</b> ilumina e desperta as pinturas · cuidado com o <b>barulho</b>', 7);
   });
   // 2 · Galeria do Silêncio: uma lacraia isolada ensina o barulho; morcegos sobre o vão
-  L2.g(420, 820).g(872, 1000).p(832, 124, 30);
+  L2.g(420, 820).g(872, 1000).p(832, 124, 30).mural(610, 'm2').mural(940, 'm3');
   L2.e('lacraia', 640).e('morcego', 760, 26).e('morcego', 930, 24);
   L2.tr(470, async () => { hint('Barulho atrai as <b>lacraias</b>: elas não veem, escutam · <kbd>K</kbd> atire na parede para distrair', 'Barulho atrai as <b>lacraias</b> · atire no chão longe de você para distrair', 7); });
   L2.tr(720, async () => { hint('<b>Morcegos-fantasma</b> mergulham na luz e apagam a tocha', '<b>Morcegos-fantasma</b> mergulham na luz e apagam a tocha', 5); });
-  // 3 · Salão das Memórias: seis pinturas e uma passagem selada (a Sétima Pintura)
-  L2.g(1000, 1520);
-  for (let i = 0; i < 6; i++) L2.mural(1066 + i * 66, 'm' + (i + 1));
+  // 3 · Salão das Memórias: a quarta pintura e uma passagem selada (a Sétima Pintura)
+  L2.g(1000, 1520).mural(1250, 'm4');
   L2.mural(1478, 'm7', { w: 84, h: 46, y: GY - 70, need: 'gruta_setima' }).gate(1478, 'gruta_setima', { w: 92, h: 60, solid: false, kind: 'nicho', reward: 'a Sétima Pintura', msg: 'Atrás dos cipós há uma pintura maior. A tocha não alcança.' });
   // 4 · Rio Sepultado: rota opcional, com uma escama guardada no alto e uma sala oculta
   L2.g(1520, 1580).wt(1580, 1900, 152).g(1580, 1900, 172).g(1900, 1960);
@@ -1106,7 +1104,7 @@ LEVELS.gruta = function () {
   L2.gate(1945, 'gruta_rio', { w: 26, h: 40, solid: false, kind: 'nicho', reward: 'uma sala oculta no Rio Sepultado' }).chest(1945, 'g_rio2');
   lastChest(L2, { need: 'gruta_rio' });
   // 5 · Poço dos Ecos: trilha sobre o abismo; a serpente passa lá embaixo; atalho de tronco
-  L2.g(1960, 2012).g(2298, 3000);
+  L2.g(1960, 2012).g(2298, 3000).mural(1986, 'm5').mural(2335, 'm6');
   L2.p(2030, 132, 30).p(2082, 116, 30).p(2134, 100, 30).p(2186, 116, 30).p(2238, 132, 30);
   L2.glimpse = { x0: 2012, x1: 2298, y: 172 };
   L2.bridge(2012, 2298, 142, 'gruta_atalho', 2306);
@@ -1126,7 +1124,7 @@ AREAS.gruta = 'Ventre da Terra';
 LEVELS.ruinas = function () {
   const L2 = LV({ act: 1, biome: 'gruta', name: 'Ruínas do Primeiro Povo', w: 760, start: 40, cave: true });
   L2.g(0, 300).g(340, 760).p(304, 128, 34).light(120, 0, 60).light(560, 0, 50);
-  L2.door(40, 'amazonia', 1110, 'Sair para a Amazônia', { arch: true });
+  L2.door(40, 'amazonia', 1110, 'Sair para a Amazônia', { arch: true, placa: 'Amazônia' });
   L2.mural(200, 'r1').mural(470, 'r2');
   L2.e('besouro', 420).e('morcego', 520, 28).e('sapo', 620);
   L2.chest(700, 'ru_1'); lastChest(L2, { item: 'coracao_antigo' });
@@ -1143,7 +1141,7 @@ const _amazonia = LEVELS.amazonia, _cerrado = LEVELS.cerrado, _caatinga = LEVELS
 LEVELS.amazonia = function () {
   const L2 = _amazonia();
   L2.gate(1110, 'amazonia_templo', { w: 30, h: 46, solid: false, kind: 'templo', reward: 'as Ruínas do Primeiro Povo', msg: 'Um templo antigo, fechado por cipós que pulsam. A lança e a zarabatana não fazem nem um risco.' });
-  L2.door(1110, 'ruinas', null, 'Entrar nas Ruínas do Primeiro Povo', { need: 'amazonia_templo' });
+  L2.door(1110, 'ruinas', null, 'Entrar nas Ruínas do Primeiro Povo', { need: 'amazonia_templo', placa: 'Ruínas' });
   L2.gate(770, 'amazonia_arvore', { y: 136, w: 18, h: 30, solid: false, kind: 'arvore', reward: 'a seiva da Árvore Oca' }).chest(770, 'a_oca', 136);
   lastChest(L2, { need: 'amazonia_arvore', item: 'seiva_antiga' });
   return L2;
@@ -1152,7 +1150,7 @@ LEVELS.cerrado = function () {
   const L2 = _cerrado();
   L2.caveEntry = { x: 430, y: GY };
   L2.gate(860, 'cerrado_raizes', { w: 30, h: 44, solid: false, kind: 'raizes', reward: 'um caminho mágico para a Caatinga', msg: 'Raízes mortas e cipós fecham uma trilha que desce para o leste.' });
-  L2.door(860, 'caatinga', null, 'Atalho para a Caatinga', { need: 'cerrado_raizes', cond: () => G.save.act >= 4 });
+  L2.door(860, 'caatinga', null, 'Atalho para a Caatinga', { need: 'cerrado_raizes', cond: () => G.save.act >= 4, placa: 'Caatinga' });
   return L2;
 };
 LEVELS.caatinga = function () {

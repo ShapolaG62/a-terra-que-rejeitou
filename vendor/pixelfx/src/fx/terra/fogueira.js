@@ -1,14 +1,14 @@
 // The tongue, lick, flame-puff, smoke and ember recipe is adapted from Sprite Fusion's open-source fire
 // (https://www.spritefusion.com/pixel-art-vfx/fire), MIT License, Copyright (c) 2026 Hugo Duprez.
 import { Rng, fit, mix, hex, rand, clamp, WHITE } from "../../core/index.js";
-import { noiseFor, hotFirst, flameTongue, firePuff, lick, smokePuff, ember, spark, drift, sparkAt, floorLight, looped, LAYERS, BACK_LAYERS } from "./_lib.js";
+import { noiseFor, hotFirst, flameTongue, firePuff, lick, smokePuff, ember, spark, drift, sparkAt, floorLight, looped, LAYERS, BACK_LAYERS } from "../fire/_lib.js";
 
 export const meta = {
-  name: "Campfire",
+  name: "Fogueira",
   desc: "Crossed logs on a bed of coals and a lively fire: tongues that lick and leap, popping sparks, embers drifting up, smoke curling off, a warm pool of light.",
   tags: ["fire", "campfire", "prop", "light", "smoke", "ambient", "loop"],
-  size: [128, 128],
-  origin: [64, 112],
+  size: [96, 88],
+  origin: [48, 76],
   duration: 3,
   loop: true,
   fps: 30,
@@ -16,7 +16,7 @@ export const meta = {
   options: {
     palette: ["#4a1712", "#8a1f17", "#c9281f", "#f2561d", "#ff8a2a", "#ffc23d", "#ffe26b", "#fff3a6", "#ffffff"],
     wood: ["#0e080a", "#24130f", "#3b2216", "#5a3520", "#8a5a34", "#b9884f"],
-    height: 22,
+    height: 13,
     seed: 3,
   },
 };
@@ -26,8 +26,8 @@ const D = meta.duration, NL = noiseFor(D), SMOKE1 = hex("#5b5566"), ASH = [hex("
 // the logs, near end first: they cross in an X over the coals, their near ends showing the cut grain and their
 // far ends poking out past the flames
 const LOGS = [
-  [-19, 2, 15, -12, 3.4],
-  [19, 2, -15, -12, 3.4],
+  [-13, 1, 10, -8, 2.4],
+  [13, 1, -10, -8, 2.4],
 ];
 const CROSS = 0.56;
 // big tongues keep more orange and a smaller white heart, so the light doesn't wash them out
@@ -35,17 +35,17 @@ const BIG_LAYERS = [[1, 1, 6], [0.8, 0.9, 5], [0.62, 0.78, 4], [0.44, 0.6, 3], [
 
 // the fire: [x, base, height (share of o.height), half-width, back row?]
 const TONGUES = [
-  [-7.5, -7, 0.42, 1.8, 1],
-  [7.5, -7, 0.46, 1.8, 1],
-  [-3, -9, 0.78, 2.0, 1],
-  [3.2, -9, 0.82, 2.0, 1],
-  [-12, -3, 0.14, 1.3, 0],
-  [12.5, -3, 0.16, 1.3, 0],
-  [-9.5, -4.5, 0.3, 1.9, 0],
-  [9.5, -4.5, 0.34, 1.9, 0],
-  [-5, -6, 0.6, 2.6, 0],
-  [5.2, -6, 0.66, 2.6, 0],
-  [0, -7, 1, 3.4, 0],
+  [-5.1, -4.8, 0.42, 1.3, 1],
+  [5.1, -4.8, 0.46, 1.3, 1],
+  [-2.0, -6.1, 0.78, 1.4, 1],
+  [2.2, -6.1, 0.82, 1.4, 1],
+  [-8.2, -2.0, 0.14, 0.9, 0],
+  [8.5, -2.0, 0.16, 0.9, 0],
+  [-6.5, -3.1, 0.3, 1.4, 0],
+  [6.5, -3.1, 0.34, 1.4, 0],
+  [-3.4, -4.1, 0.6, 1.9, 0],
+  [3.5, -4.1, 0.66, 1.9, 0],
+  [0.0, -4.8, 1, 2.4, 0],
 ];
 
 // a log from its near end (x0, y0) to its far end, radius r, drawn between u0 and u1 along it: a 1 px dark rim,
@@ -80,8 +80,8 @@ function log(p, L, W, H, u0, u1, t, S) {
 
 // the bed of coals under the logs: coals that breathe in the heat, grey ash round the rim
 function coals(p, W, H, t, S) {
-  p.shade(-15, -3, 15, 2, (x, y, out) => {
-    const dx = x / 14, dy = (y + 0.3) / 2.2, d = dx * dx + dy * dy;
+  p.shade(-11, -2, 11, 2, (x, y, out) => {
+    const dx = x / 10, dy = (y + 0.3) / 1.8, d = dx * dx + dy * dy;
     if (d > 1) return;
     const h = rand(Math.floor(x / 2), Math.floor(y), S + 20);
     if (d > 0.55 && h < 0.55) return ASH[h < 0.15 ? 2 : h < 0.32 ? 1 : 0];
@@ -119,7 +119,7 @@ export function draw(p, t, o) {
 
   // smoke curling off the top, behind everything: each puff keeps the sway the plume had when it left the
   // flames, so the wiggle climbs the plume, and the draught bends it over as it rises
-  looped(t, D, 48, S + 300, (r) => ({ x: r.range(-5, 5), y: -HC * 0.8 - r.range(0, 8), vx: r.range(-2, 2), vy: -r.range(10, 17), life: r.range(2, 2.9), s: r.range(2.4, 3.8) }), (q, age) => {
+  looped(t, D, 14, S + 300, (r) => ({ x: r.range(-5, 5), y: -HC * 0.8 - r.range(0, 8), vx: r.range(-2, 2), vy: -r.range(10, 17), life: r.range(1.4, 2), s: r.range(1.2, 2) }), (q, age) => {
     const [x, y] = drift(q.x, q.y, q.vx, q.vy, age, 4, -20, 1.6, 1);
     smokePuff(p, x + NL(t - age, 0.8, S + 60) * (2 + 3 * age), y, 1 - age / q.life, q.s, SMOKE);
   });
@@ -141,7 +141,7 @@ export function draw(p, t, o) {
   for (const L of LOGS) log(p, L, W, H, CROSS, 1, t, S + 11);
   for (let i = 0; i < T.length; i++) if (T[i].back) tongueAt(i);
   // flames licking up off the burning wood
-  looped(t, D, 90, S + 210, (r) => ({ x: r.range(-10, 10), y: -r.range(3, 8), vx: r.range(-5, 5), vy: -r.range(20, 40), life: r.range(0.16, 0.3), s: r.range(1, 1.8), f: r.next() }), (q, age) => {
+  looped(t, D, 40, S + 210, (r) => ({ x: r.range(-7, 7), y: -r.range(3, 8), vx: r.range(-5, 5), vy: -r.range(20, 40), life: r.range(0.16, 0.3), s: r.range(1, 1.8), f: r.next() }), (q, age) => {
     const [x, y] = drift(q.x, q.y, q.vx, q.vy, age, 0, -95, 5, 3.2);
     firePuff(p, x, y, 1 - age / q.life, q.s, q.f, H);
   });
@@ -155,21 +155,21 @@ export function draw(p, t, o) {
   for (const L of LOGS) log(p, L, W, H, 0, CROSS, t, S + 11);
 
   // pops: a crack, a flash, and a fistful of sparks thrown up out of the wood that bounce on the floor
-  looped(t, D, 4, S + 400, (r) => ({ x: r.range(-9, 9), y: -r.range(4, 9), n: r.int(3, 5), seed: r.int(0, 1e6), life: 0.7 }), (q, age) => {
+  looped(t, D, 2, S + 400, (r) => ({ x: r.range(-6, 6), y: -r.range(3, 6), n: r.int(2, 3), seed: r.int(0, 1e6), life: 0.7 }), (q, age) => {
     if (age < 0.08) {
       p.px(q.x, q.y, WHITE);
       p.glow(q.x, q.y, 12, H[1], 0.7 * (1 - age / 0.08));
     }
     const r = new Rng(q.seed);
     for (let j = 0; j < q.n; j++) {
-      const a = -Math.PI / 2 + r.range(-0.8, 0.8), sp = r.range(110, 220), life = r.range(0.25, 0.6);
+      const a = -Math.PI / 2 + r.range(-0.8, 0.8), sp = r.range(60, 120), life = r.range(0.25, 0.6);
       if (age >= life) continue;
       const [x, y, vx, vy] = sparkAt(q.x, q.y, Math.cos(a) * sp, Math.sin(a) * sp, age, 0);
       spark(p, x, y, vx, vy, 1 - age / life, SPARKS);
     }
   });
   // embers carried up by the heat, wandering and cooling
-  looped(t, D, 36, S + 500, (r) => ({ x: r.range(-7, 7), y: -r.range(8, 18), vx: r.range(-15, 15), vy: -r.range(25, 60), life: r.range(1.1, 2.5), s: r.chance(0.15) ? 2 : r.range(1, 1.6), a: r.range(0, 6.3), b: r.range(0, 6.3) }), (q, age) => {
+  looped(t, D, 12, S + 500, (r) => ({ x: r.range(-5, 5), y: -r.range(6, 12), vx: r.range(-15, 15), vy: -r.range(25, 60), life: r.range(1.1, 2.5), s: r.chance(0.15) ? 2 : r.range(1, 1.6), a: r.range(0, 6.3), b: r.range(0, 6.3) }), (q, age) => {
     const [x, y] = drift(q.x, q.y, q.vx, q.vy, age, 0, -30, 1.6, 1.6);
     ember(p, x + 7 * (Math.sin(age * 2.3 + q.a) - Math.sin(q.a)), y + 2 * (Math.sin(age * 3 + q.b) - Math.sin(q.b)), 1 - age / q.life, q.s, EMB, age * 40 + q.a);
   });
@@ -177,11 +177,11 @@ export function draw(p, t, o) {
   // light: a big warm room light, a hot heart, a pool on the floor, all breathing with the flames
   const br = 0.92 + 0.08 * N(0.67, S + 3);
   const lx = lean(t) * 12;
-  p.glow(lx, -8, 74 * br * (0.9 + 0.1 * fl), GLOW, 0.3 * fl);
-  for (const [x, y, k] of [[-6, -17, 0.85], [0, -21, 1], [6, -17, 0.85]]) {
-    p.glow(x + lx, y, 46 * br, GLOW, 0.3 * k * fl);
+  p.glow(lx, -6, 44 * br * (0.9 + 0.1 * fl), GLOW, 0.26 * fl);
+  for (const [x, y, k] of [[-4, -11, 0.85], [0, -14, 1], [4, -11, 0.85]]) {
+    p.glow(x + lx, y, 26 * br, GLOW, 0.24 * k * fl);
     p.glow(x * 0.6, y + 13, 15, H[2], 0.16 * k * fl);
   }
   p.glow(0, -3, 9, H[0], 0.16 * fl);
-  floorLight(p, 0, 0.5, 48, 8, GLOW, 0.3 * fl);
+  floorLight(p, 0, 0.5, 34, 5, GLOW, 0.34 * fl);
 }

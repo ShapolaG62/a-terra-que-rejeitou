@@ -12,7 +12,7 @@ node server.js
 
 Depois abra http://localhost:5179 no navegador. Funciona no computador (teclado, mouse ou controle) e no celular (botões na tela).
 
-Ao abrir, os dois vídeos de `assets/videos/` tocam em sequência a 1,5× antes do menu. Se o navegador bloquear o início com som, use **Iniciar jogo**. Para ir direto ao menu, use **Pular abertura**, **Esc** ou **B** no controle.
+Depois do botão **Iniciar jogo**, toca a abertura narrada em velocidade normal, seguida dos outros dois vídeos de `assets/videos/` a 1,5×, e então o menu. Se o navegador bloquear o início com som, use **Iniciar jogo**. Para ir direto ao menu, use **Pular abertura**, **Esc** ou **B** no controle.
 
 As músicas de `assets/audio/` tocam conforme o momento: **Trilha da Jornada** no menu principal, **Música tema** na exploração, **batalha com boss** nas lutas e **após vencer boss** nas cenas de vitória. A opção **Som** no menu de pausa controla as trilhas e os efeitos.
 
@@ -56,10 +56,13 @@ Para testar esse capítulo e os dois retornos sem alterar seu progresso, abra ht
 | `js/fauna.js` | bichos corrompidos |
 | `js/world.js` | física, jogador, inimigos, combate, água, calor |
 | `js/bosses.js`, `js/beasts.js` | comportamento e desenho dos chefes |
+| `js/chefes.js` | o jeito de cada chefe: movimento do corpo, efeitos dos golpes e a morte de cada um |
+| `css/inventario.css`, `js/inventario.js` | inventário em grade de espaços, com texturas geradas no próprio jogo |
 | `js/story.js` | roteiro, fases, diálogos, menus e laço principal |
 | `js/journey.js` | convivência na margem, passarela, escolhas da fogueira, retorno do Mapinguari e ambiência |
 | `js/companions.js` | encontros de Cecília, Bento, Rosa e Celina; gestos que mudam o cenário, lembranças e reencontros |
 | `js/vfx.js`, `js/pixelfx.bundle.js`, `vendor/pixelfx/` | efeitos visuais (biblioteca pixelfx e os efeitos próprios em `src/fx/terra`); recrie o bundle com `node tools/build-vfx.mjs` |
+| `js/conquistas.js` | conquistas (incluindo Sem Morrer e Platina) e estatísticas: tempo para zerar, mortes e nível |
 | `js/gruta.js` | Gruta dos Antigos: escuridão, ruído, pinturas, Boitatá, Olho de Fogo Frio, selos e viagem |
 | `server.js` | servidor local mínimo |
 | `tools/` | ferramentas de apoio (não fazem parte do jogo) |

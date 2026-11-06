@@ -22,7 +22,7 @@ function game() {
   const sandbox = vm.createContext({
     ctx, I: { down: {}, pressed: {} },
     document: { createElement: () => ({ getContext: () => ({ setTransform() {}, drawImage() {}, fillRect() {}, save() {}, restore() {}, createRadialGradient: () => ({ addColorStop() {} }) }) }) },
-    VFX: new Proxy({}, { get: () => () => {} }), SFX: new Proxy({}, { get: () => () => {} }),
+    CONQ: new Proxy({}, { get: () => () => {} }), VFX: new Proxy({}, { get: () => () => {} }), SFX: new Proxy({}, { get: () => () => {} }),
   });
   const core = source('core.js');
   vm.runInContext(core.slice(core.indexOf('const W'), core.indexOf('const cv')) +

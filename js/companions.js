@@ -171,7 +171,7 @@ async function companionCamp(id) {
 function companionInteractables(add) {
   const id = G.lvl.id, c = COMPANIONS[id];
   if (!c) {
-    if (id === 'gruta' && companionState('cerrado').helped) add(90, GY, 'Reconhecer a fita de Cecília', () => scene(() => talk([['', 'Uma fita parecida com a do marco prende a tocha à madeira.'], ['Espírito', 'Um caminho de volta. Ainda aqui.']])));
+    if (id === 'gruta' && companionState('cerrado').helped) add(90, GY, 'Reconhecer a fita de Cecília', () => scene(() => talk([['', 'Uma fita parecida com a do marco, amarrada à madeira.'], ['Espírito', 'Um caminho de volta. Ainda aqui.']])));
     return;
   }
   const r = companionState(id);
@@ -254,7 +254,10 @@ function companionFinalMemory() {
 function drawCompanionProp(p, t, gy) {
   const id = p.region, r = id ? companionState(id) : companionState('cerrado'), x = p.x;
   if (p.kind === 'journeyRegionalRibbon') {
-    rect(ctx, x, gy - 28, 2, 28, '#745b3a'); rect(ctx, x + 2, gy - 24, 11, 3, '#d0ac66'); drawFire(ctx, x, gy - 29, t, true); return;
+    // uma estaca com a fita de Cecília, que balança devagar
+    rect(ctx, x, gy - 28, 2, 28, '#745b3a'); rect(ctx, x, gy - 28, 1, 28, '#8f7350');
+    for (let i = 0; i < 12; i++) { const o = Math.round(Math.sin(t * 2.4 - i * 0.55) * Math.min(i, 6) * 0.3); rect(ctx, x + 2 + i, gy - 27 + o, 1, 6 - (i >> 2), i % 4 === 3 ? '#a8843e' : '#d0ac66'); }
+    return;
   }
   if (p.kind === 'journeyRegionalRest') {
     rect(ctx, x - 8, gy - 2, 16, 2, '#9c7f50');

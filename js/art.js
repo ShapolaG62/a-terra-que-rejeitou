@@ -381,6 +381,7 @@ function humanPose(a, s) {
     if (sh === 'arrow' || sh === 'firearrow') { P.af = [HPI / 2 + 0.05, 0]; P.ab = [HPI / 2 + 0.1, lerp(0.4, 2.5, w) * (1 - after)]; P.wa = HPI / 2; P.draw = p < rel ? w : 0; P.arrow = p < rel; P.lean = -after; }
     else if (sh === 'dart' || sh === 'burst') { P.af = [2.0, 0.7]; P.ab = [2.1, 0.9]; P.wa = HPI / 2; P.mouth = true; P.puff = (p > rel - 0.05 && p < rel + 0.15) || (sh === 'burst' && Math.sin(p * 30) > 0.3); }
     else if (sh === 'javelin' || sh === 'throw') { const a1 = p < rel ? lerp(1.0, HPI + 0.75, w) : lerp(HPI + 0.75, 1.2, after); P.af = [a1, 0.2]; P.wa = a1 + 0.15; P.lean = p < rel ? -w : 2 * after; P.ff = [2 + 2 * after, 0]; if (p >= rel) P.noWeapon = sh === 'throw'; }
+    else if (sh === 'jato') { const a1 = p < rel ? lerp(1.0, -0.55, w) : lerp(-0.55, 2.15, after); P.af = [a1, 0.15]; P.wa = a1 + 0.2; P.crouch = p < rel ? 2 * w : 2 * (1 - after); P.lean = p < rel ? -w : after; P.ff = [2 * after, 0]; }
     else if (sh === 'drop' || sh === 'splash') { const a1 = p < rel ? lerp(0.2, -0.9, w) : lerp(-0.9, 2.2, after); P.af = [a1, 0.3]; P.gourd = true; P.noWeapon = true; P.lean = after; if (sh === 'splash' && p >= rel) P.slash = { st: 'sweep', a0: -0.9, a1, r: 12, water: true }; }
     else if (sh === 'roots') { const a1 = p < rel ? lerp(0.9, HPI + 0.3, w) : lerp(HPI + 0.3, 0.2, after); P.af = [a1, 0.1]; P.wa = a1; P.crouch = 3 * after; P.lean = after; }
     else if (sh === 'seed') { const a1 = p < rel ? lerp(0.6, HPI, w) : lerp(HPI, 1.7, after); P.af = [a1, 0.1]; P.wa = a1; P.lean = after; }

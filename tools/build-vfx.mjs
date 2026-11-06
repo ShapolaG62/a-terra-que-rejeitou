@@ -18,12 +18,16 @@ export const USED = [
   // impactos
   "impacts/hit-spark", "impacts/blunt-hit", "impacts/crit-hit", "impacts/ground-slam",
   // fogo, água e natureza
-  "fire/campfire", "fire/fire-ring", "water/splash", "water/ripples", "nature/quake", "nature/thorns", "nature/tornado",
+  "fire/fire-ring", "water/splash", "nature/quake", "nature/thorns", "nature/tornado",
   // vida, morte e recompensa
   "spawn/poof", "spawn/soul-rise", "explosions/implosion", "shadow/dark-explosion", "pickups/collect-burst",
   "holy/heal-aoe", "holy/holy-pillar", "holy/feather-burst", "holy/sunburst",
   // feitos para o jogo
-  "terra/ar", "terra/poeira", "terra/memoria", "terra/acende", "terra/corrente", "terra/selo",
+  "terra/fogueira", "terra/ar", "terra/poeira", "terra/memoria", "terra/acende", "terra/corrente", "terra/selo", "terra/jato", "terra/uivo",
+  "terra/morte-lobo", "terra/morte-mapinguari", "terra/morte-capelobo", "terra/morte-boitata", "terra/morte-paidomato", "terra/morte-labatut", "terra/morte-corposeco",
+  // golpes dos chefes
+  "melee/claw-swipe", "melee/heavy-cleave", "melee/scythe-reap", "nature/vine-whip", "nature/leaf-storm",
+  "impacts/heavy-landing", "shadow/grasping-hands", "shadow/soul-drain", "shadow/hex-sigil", "shadow/curse", "fire/spirit-flame", "fire/fire-breath", "fire/flame-pillar",
 ];
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

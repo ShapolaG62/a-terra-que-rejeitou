@@ -16,7 +16,7 @@ function go(B, st, tt) {
 function bossHurt(B, dmg, dir, o = {}) {
   if (['intro', 'down', 'still', 'ask', 'yield'].includes(B.st) || B.inv) return false;
   if (B.hidden && !(FORMS[G.P.form] || {}).track) return false;
-  B.hp -= dmg; B.flash = 0.1;
+  B.hp -= G.teste ? dmg * 10 : dmg; B.flash = 0.1;
   if (B.kind === 'corposeco' && B.hp < 1) B.hp = 1; // ele não cai: para de atacar (ver corpoStill)
   if (!o.quiet) { SFX.hit(); VFX.hitB(B, dir, o); }
   if (o.poison) B.poison = 3;
@@ -33,18 +33,13 @@ function updateBoss(dt) {
   if (B.kind === 'mapinguari') B.stateT = (B.stateT || 0) + dt * DIFF.bossSpeed;
   if (B.st !== B.prevSt) {
     const prev = B.prevSt; B.prevSt = B.st;
-    if (B.kind !== 'mapinguari' && FX_ENTER[B.st]) FX_ENTER[B.st](B);
-    if (B.st === 'down') { B.downAt = B.t; B.knelt = false; }
-    if (B.st === 'rec' && ['slamW', 'stompW', 'jacareW', 'waveW'].includes(prev)) bossFx('burst', B.x + B.f * 22, B.kind === 'paidomato' ? 152 : GY, B.f, { col: B.kind === 'labatut' ? '#d8b890' : '#c8b088' });
+    CHEFES.entrou(B, prev);
   }
   if ((B.st === 'charge' || B.st === 'grab' || B.st === 'ambush' || B.st === 'stalk') && Math.random() < 0.7) part(B.x - B.f * 10, B.y - 1, -B.f * rnd(20, 60), rnd(-40, -10), 0.5, '#c8a888', 2, 60);
   if (B.poison > 0 && B.st !== 'down') { B.poison -= dt; B.pt -= dt; if (B.pt <= 0) { B.pt = 0.5; bossHurt(B, 3, 0, { quiet: true }); } }
-  if (B.st === 'down' && !B.knelt && B.kind !== 'corposeco' && B.t - (B.downAt || 0) > 0.6) {
-    // cai de joelhos: poeira e tremor; depois respira ofegante soltando faíscas de memória
-    B.knelt = true; G.cam.shake = 5; SFX.boom(); bossFx('burst', B.x, B.kind === 'paidomato' ? 152 : GY, B.f, { col: '#c8b088' });
-    for (let i = 0; i < 16; i++) part(B.x + rnd(-20, 20), GY - 2, rnd(-60, 60), rnd(-50, -10), 0.8, '#c8b088', 2, 120);
-  }
-  if (B.st === 'down' && B.knelt && Math.random() < 0.25) part(B.x + rnd(-14, 14), B.y - rnd(10, B.h), rnd(-6, 6), rnd(-30, -12), 1.4, pick(['#f6e3a6', '#bfe4ff', '#8fe37a']), 1, -10);
+  CHEFES.tick(B, dt);
+  // caído, respira ofegante soltando faíscas de memória
+  if (B.st === 'down' && B.t - (B.downAt || 0) > 2.6 && Math.random() < 0.25) part(B.x + rnd(-14, 14), B.y - rnd(10, B.h), rnd(-6, 6), rnd(-30, -12), 1.4, pick(['#f6e3a6', '#bfe4ff', '#8fe37a']), 1, -10);
   if (B.st === 'intro') { if (B.tt <= 0) go(B, 'idle', 0.5); }
   else if (B.st !== 'down') BOSSES[B.kind].update(B, dt);
   const [a0, a1] = arenaX(); B.x = clamp(B.x, a0 + B.w / 2 - 8, a1 - B.w / 2 + 8);
@@ -57,7 +52,7 @@ function drawBoss(B) {
     return;
   }
   if (B.alpha != null) ctx.globalAlpha = Math.max(0, B.alpha);
-  BOSSES[B.kind].draw(B);
+  CHEFES.desenha(B, () => BOSSES[B.kind].draw(B));
   ctx.globalAlpha = 1;
 }
 function pdx() { return G.P.x + 5 - G.boss.x; }
@@ -428,7 +423,7 @@ const BOSSES = {
           if (B.phase === 2) shoot({ team: 'e', x: B.x, y: B.y - 80, vx: d2 / T * 0.6, vy: (dy - 0.5 * 420 * T * T) / T, w: 10, h: 10, dmg: 18, kind: 'rock', grav: 420, life: 3 });
           SFX.swing(); go(B, 'rec', 0.5);
         } break;
-        case 'stompW': if (B.tt <= 0) { SFX.boom(); G.cam.shake = 7; VFX.play('nature/quake', B.x, GY, { dur: 1.2 }); for (const s of [-1, 1]) addHazard({ kind: 'shock', x: B.x + s * 14, y: GY - 9, w: 8, h: 9, vx: s * 150, life: 2.2, dmg: 18, col: '#b08a70' }); for (let i = 0; i < 20; i++) part(B.x + rnd(-30, 30), GY, rnd(-40, 40), rnd(-60, -10), 0.9, '#c8a488', 2, 40); go(B, 'rec', 0.7); } break;
+        case 'stompW': if (B.tt <= 0) { SFX.boom(); G.cam.shake = 7; VFX.play('nature/quake', B.x, GY, { dur: 1.2 }); for (const s of [-1, 1]) addHazard({ kind: 'shock', x: B.x + s * 14, y: GY - 9, w: 8, h: 9, vx: s * 150, life: 2.2, dmg: 18, col: '#e8a860' }); for (let i = 0; i < 20; i++) part(B.x + rnd(-30, 30), GY, rnd(-40, 40), rnd(-60, -10), 0.9, '#c8a488', 2, 40); go(B, 'rec', 0.7); } break;
         case 'sunW': if (B.tt <= 0) { B.sunT = 5; showToast('Sol a pino', 'procure a sombra', 1.6); SFX.fire(); go(B, 'rec', 0.6); } break;
         case 'grabW': B.f = Math.sign(dx) || B.f; if (B.tt <= 0) { go(B, 'grab', 1); SFX.roar(); } break;
         case 'grab': { B.x += B.f * 150 * dt; B.hitDmg = 24; const [a0, a1] = arenaX(); if (B.x - 15 <= a0 || B.x + 15 >= a1 || B.tt <= 0) go(B, 'rec', 0.8); break; }
@@ -467,7 +462,7 @@ const BOSSES = {
         }
         case 'rootsW': if (B.tt <= 0) {
           const px = G.P.x + 5, n = ph3 ? 7 : ph2 ? 5 : 4;
-          for (let i = 0; i < n; i++) { const x = px + (i - (n - 1) / 2) * 28; addHazard({ kind: 'roots', x: x - 10, y: GY - 36, w: 20, h: 36, warn: 0.7 + i * 0.07, life: 1.2 + i * 0.07, dmg: 26, col: '#c8803a', col2: '#4a3424' }); }
+          for (let i = 0; i < n; i++) { const x = px + (i - (n - 1) / 2) * 28; addHazard({ kind: 'roots', x: x - 10, y: GY - 36, w: 20, h: 36, warn: 0.7 + i * 0.07, life: 1.2 + i * 0.07, dmg: 26, col: '#c8803a', col2: '#d8903e' }); }
           go(B, 'rec', ph3 ? 0.7 : 0.9);
         } break;
         case 'thornsW': if (B.tt <= 0) {
@@ -511,15 +506,25 @@ function jacareUpd(h, dt) {
   else { h.jaws -= dt; const box = { x: h.x, y: 128, w: 26, h: 26 }; if (!h.hit && h.jaws < 0.3 && overlap(box, G.P)) h.hit = hurtPlayer(22, h.x + 13); if (h.jaws <= 0) h.life = 0; }
 }
 function jacareDraw(h) {
-  if (!h.jaws) { rect(ctx, h.x + 4, 151, 18, 1, '#2a1c14'); rect(ctx, h.x + 18, 150, 3, 1, '#ffd27a'); return; }
+  if (!h.jaws) {
+    // o alvo pisca na água, e o bicho vem cortando a superfície
+    const a = 0.55 + Math.sin(G.t * 18) * 0.45, d = Math.sign(h.vx) || 1, cab = d > 0 ? h.x + 24 : h.x + 2;
+    ctx.globalAlpha = a; rect(ctx, h.tx - 15, 151, 30, 2, '#ff5a3a'); rect(ctx, h.tx - 15, 149, 2, 2, '#ff5a3a'); rect(ctx, h.tx + 13, 149, 2, 2, '#ff5a3a'); ctx.globalAlpha = 1;
+    for (let i = 1; i < 5; i++) { rect(ctx, cab - d * i * 6, 150 - i, 4, 1, '#ffffff'); rect(ctx, cab - d * i * 6, 152 + i, 4, 1, '#e8d8f0'); }
+    rect(ctx, h.x + 1, 147, 24, 6, '#10160c'); rect(ctx, h.x + 2, 148, 22, 4, '#5a7a3a');
+    for (let i = 0; i < 5; i++) rect(ctx, h.x + 4 + i * 4, 147, 2, 1, '#8aaa5a');
+    softGlow(ctx, cab, 148, 7, 5, '#ffd27a', 0.7); rect(ctx, cab - 1, 147, 3, 2, '#fff4a0');
+    return;
+  }
   const o = clamp((0.4 - h.jaws) * 60, 0, 14);
-  rect(ctx, h.x, 150 - o, 26, 4, '#3a4a2a'); rect(ctx, h.x, 150 + 2, 26, 3, '#3a4a2a');
+  rect(ctx, h.x - 1, 149 - o, 28, 6, '#10160c'); rect(ctx, h.x - 1, 151, 28, 5, '#10160c');
+  rect(ctx, h.x, 150 - o, 26, 4, '#5a7a3a'); rect(ctx, h.x, 150 + 2, 26, 3, '#5a7a3a');
   for (let i = 0; i < 6; i++) { rect(ctx, h.x + 2 + i * 4, 154 - o, 1, 2, '#efe8dc'); rect(ctx, h.x + 3 + i * 4, 150, 1, 2, '#efe8dc'); }
   rect(ctx, h.x + 20, 148 - o, 2, 2, '#ffd27a');
 }
 function waveUpd(h, dt) { h.x += h.vx * dt; if (!h.hit && overlap(h, G.P)) h.hit = hurtPlayer(h.dmg, h.x + 10); if (Math.random() < 0.8) part(h.x + 10, h.y, rnd(-20, 20), rnd(-60, -20), 0.4, '#c8d8f0'); const [a0, a1] = arenaX(); if (h.x < a0 - 40 || h.x > a1 + 20) h.life = 0; }
-function waveDraw(h) { for (let i = 0; i < h.w; i++) { const hh = h.h * Math.sin(i / h.w * Math.PI); rect(ctx, h.x + i, h.y + h.h - hh, 1, hh, i % 3 ? '#7a8ab8' : '#c8d8f0'); } }
+function waveDraw(h) { softGlow(ctx, h.x + h.w / 2, h.y + h.h / 2, 18, 16, '#8ad0ff', 0.5); for (let i = -1; i <= h.w; i++) { const hh = h.h * Math.sin((i + 1) / (h.w + 1) * Math.PI) + 1; rect(ctx, h.x + i, h.y + h.h - hh, 1, hh, '#0e1a3a'); } for (let i = 0; i < h.w; i++) { const hh = h.h * Math.sin(i / h.w * Math.PI); rect(ctx, h.x + i, h.y + h.h - hh, 1, hh, i % 3 ? '#2a8ad0' : '#5ab8ec'); rect(ctx, h.x + i, h.y + h.h - hh, 1, 2, '#ffffff'); } }
 
 function howlUpd(h, dt) { h.r += 170 * dt; const P = G.P, d = Math.hypot(P.x + 5 - h.x, (P.y + 11 - h.y) * 2); if (!h.hit && Math.abs(d - h.r) < 9 && P.state !== 'dash') { h.hit = hurtPlayer(14, h.x); if (h.hit) P.slow = 1; } }
 function tornadoUpd(h, dt) { const P = G.P; h.x += clamp(P.x + 5 - (h.x + h.w / 2), -1, 1) * 46 * dt; h.tick -= dt; if (h.tick <= 0 && overlap(h, P)) { h.tick = 0.5; if (hurtPlayer(h.dmg, h.x + h.w / 2)) P.vy = -200; } if (Math.random() < 0.8) part(h.x + rnd(0, h.w), GY - rnd(0, 6), rnd(-30, 30), rnd(-80, -30), 0.6, pick(['#8a7a5e', '#c8b898', '#5a4a38']), 1, -20); }
-function tornadoDraw(h) { VFX.keep('tornado', 'nature/tornado', h.x + h.w / 2, GY, { height: 88, palette: VFX.PAL.shadow, dust: VFX.PAL.bone, layer: 'front' }); return; const k = Math.min(1, h.t / 0.4) * Math.min(1, h.life); ctx.globalAlpha = 0.75 * k; for (let i = 0; i < h.h; i += 2) { const w = 4 + i / h.h * 16, o = Math.sin(G.t * 9 + i * 0.25) * 3; rect(ctx, h.x + h.w / 2 - w / 2 + o, GY - i, w, 2, i % 6 < 3 ? '#a8987a' : '#6a5a44'); } ctx.globalAlpha = 1; }
+function tornadoDraw(h) { VFX.keep('tornado', 'nature/tornado', h.x + h.w / 2, GY, { height: 88, palette: ['#2a1040', '#4f1f78', '#7a34a8', '#a050d0', '#c880f0', '#e8b0ff', '#f4d8ff', '#ffffff'], dust: VFX.PAL.bone, layer: 'front' }); return; const k = Math.min(1, h.t / 0.4) * Math.min(1, h.life); ctx.globalAlpha = 0.75 * k; for (let i = 0; i < h.h; i += 2) { const w = 4 + i / h.h * 16, o = Math.sin(G.t * 9 + i * 0.25) * 3; rect(ctx, h.x + h.w / 2 - w / 2 + o, GY - i, w, 2, i % 6 < 3 ? '#a8987a' : '#6a5a44'); } ctx.globalAlpha = 1; }

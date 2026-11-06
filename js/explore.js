@@ -1,6 +1,6 @@
 'use strict';
-// Exploração temporária: preserva o save enquanto permite visitar todas as regiões.
-G.exploring = true;
+// Exploração temporária: preserva o save enquanto permite visitar todas as regiões. Liga pelo menu de pausa.
+G.exploring = false;
 const exploreWrite = writeSave, exploreHurt = hurtPlayer, exploreDie = die, exploreUpdate = updatePlayer;
 writeSave = () => { if (!G.exploring) exploreWrite(); };
 hurtPlayer = (...args) => G.exploring ? false : exploreHurt(...args);
@@ -16,7 +16,7 @@ clearSave = () => { if (!G.exploring) exploreClear(); };
 async function explorationMenu() {
   const places = ['prologo', 'amazonia', 'cerrado', 'pantanal', 'caatinga', 'mata', 'coracao'];
   const a = await menu('<h2>Exploração temporária</h2><p>Sem dano. Esta exploração não grava progresso.</p><div class="btns">' + places.map(id => `<button class="btn" data-act="${id}">${ROTA_NOME[id]}</button>`).join('') + '<button class="btn" data-act="off">Desligar e restaurar progresso salvo</button><button class="btn" data-act="back">Voltar</button></div>');
-  if (a === 'off') { G.exploring = false; G.save = loadSave() || newSave(); await enterAct(G.save.act, { skipCard: true }); return; }
+  if (a === 'off') { G.exploring = false; G.save = loadSave() || newSave(); await enterAct(G.save.act, { skipCard: true }); return true; }
   if (!places.includes(a)) return;
   G.save = JSON.parse(JSON.stringify(G.save));
   G.save.act = ACTS.indexOf(a); G.save.sub = null; G.save.caveReturn = null;
@@ -33,4 +33,5 @@ async function explorationMenu() {
   G.cam.x = 0; G.cam.shake = 0; G.state = 'play'; G.trans = null;
   for (const t of G.lvl.triggers) t.done = true;
   hud.cache = {}; updateHudForm(); showToast('Exploração temporária', ROTA_NOME[a] + ' · sem dano · progresso não salvo', 4);
+  return true;
 }

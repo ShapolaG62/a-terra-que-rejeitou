@@ -24,7 +24,7 @@ function game() {
   }
   const sandbox = vm.createContext({
     ctx, cv: {}, stage: element(), I: { down: {}, pressed: {}, mouseT: -Infinity }, L: { touch: false },
-    VFX: new Proxy({}, { get: () => () => {} }), SFX: new Proxy({}, { get: () => () => {} }), soundWood() {}, soundNote() {}, soundAir() {},
+    CONQ: new Proxy({}, { get: () => () => {} }), VFX: new Proxy({}, { get: () => () => {} }), SFX: new Proxy({}, { get: () => () => {} }), soundWood() {}, soundNote() {}, soundAir() {},
     AU: { ctx: null, master: null, on: true, vol: 0.8, mus: 1, music: { volume: 0.28 } },
     musicVol() { return 0.8; }, musicSet() {},
     $: selector => { if (!elements.has(selector)) elements.set(selector, element()); return elements.get(selector); },
@@ -35,7 +35,7 @@ function game() {
   vm.runInContext(core.slice(core.indexOf('const W'), core.indexOf('const cv')) +
     core.slice(core.indexOf('const clamp'), core.indexOf('// ---------- Layout')) +
     core.slice(core.indexOf('function newSave()'), core.indexOf('function loadSave()')), sandbox);
-  for (const file of ['textos.js', 'itens.js', 'art.js', 'tiles.js', 'fauna.js', 'world.js', 'bosses.js', 'beasts.js', 'pxfont.js', 'journey.js', 'companions.js', 'story.js', 'gruta.js']) {
+  for (const file of ['textos.js', 'itens.js', 'art.js', 'tiles.js', 'fauna.js', 'world.js', 'bosses.js', 'beasts.js', 'chefes.js', 'pxfont.js', 'journey.js', 'companions.js', 'story.js', 'gruta.js']) {
     const code = file === 'story.js' ? source(file).slice(0, source(file).lastIndexOf('\nsetupTouch();')) : source(file);
     vm.runInContext(code, sandbox, { filename: file });
   }
@@ -565,7 +565,7 @@ test('escolher Cerrado na exploração permite lutar de novo sem alterar a vitó
   g.loadLevel('cerrado'); assert.equal(g.G.lvl.arena.cleared, true);
   g.run('function clearSave() {} function loadSave() { return null; }');
   g.run(source('explore.js'));
-  g.run('menu = async () => "cerrado";');
+  g.run('menu = async () => "cerrado";'); g.G.exploring = true; // liga pelo menu de pausa
   await g.run('explorationMenu()');
   assert.notEqual(g.G.save, original); assert.equal(original.harmony.capelobo, 'purificar');
   assert.equal(original.journey.regions.cerrado.returned, true);
@@ -586,4 +586,20 @@ test('uma vitória real no Capelobo continua concluída ao voltar da gruta', asy
   g.G.P.x = 2001; g.run('checkArena();');
   assert.equal(g.G.boss, null); assert.equal(g.G.lvl.arena.cleared, true);
   assert.equal(g.G.save.harmony.capelobo, 'poupar');
+});
+
+test('só uma cena de história dispara por vez, para o jogador nunca ficar preso', async () => {
+  const g = game();
+  g.G.P = g.makePlayer(500, g.GY); g.G.arriving = false; g.G.cavePassage = false; g.G.lock = 0;
+  const abertas = []; let solta;
+  g.G.lvl.triggers = [10, 20].map(x => ({ x, done: false, fn: () => { abertas.push(x); return new Promise(r => { solta = r; }); } }));
+  g.run('checkTriggers(); checkTriggers();');
+  assert.deepEqual(abertas, [10], 'a segunda espera a primeira terminar');
+  assert.equal(g.G.lock, 1);
+  solta(); await new Promise(r => setTimeout(r, 0));
+  assert.equal(g.G.lock, 0);
+  g.run('checkTriggers();');
+  assert.deepEqual(abertas, [10, 20]);
+  solta(); await new Promise(r => setTimeout(r, 0));
+  assert.equal(g.G.lock, 0);
 });

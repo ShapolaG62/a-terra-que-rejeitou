@@ -11,13 +11,18 @@ const VFX = (() => {
   frame.color = new Uint32Array(imgC.data.buffer); frame.light = new Uint32Array(imgL.data.buffer);
   // telas de 1 pixel por unidade do jogo, de propósito: não usam mk(), que dobra a resolução (putImageData escreve em pixels crus)
   const buffer = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return [c, c.getContext('2d')]; };
-  const [cC, xC] = buffer(), [cL, xL] = buffer();
-  let list = [], kept = {}, tick = 0, props = [], air = [];
+  // cada camada tem as suas telas, para poder repetir o último desenho sem recalcular
+  const camadas = {};
+  const camada = nome => camadas[nome] || (camadas[nome] = (() => { const [c, x] = buffer(), [cl, xl] = buffer(); return { c, x, cl, xl, vez: 0, cx: 0, x0: 0, y0: 0, bw: 0, bh: 0, lit: false, pronta: false }; })());
+  let list = [], kept = {}, tick = 0, air = [];
+  // qualidade: 0 cheia; 1 redesenha tudo em meia taxa e usa menos efeitos; 2 também tira o ambiente. Só desce, e sozinha.
+  let Q = 0, media = 1 / 60, desde = 0;
+  const TETO = [24, 14, 8];
 
   const seed = () => 1 + (Math.random() * 1e6 | 0);
   function add(id, x, y, o = {}) {
     const mod = LIB[id]; if (!mod) return null;
-    if (list.length > 40) return null;
+    if (list.length >= TETO[Q]) return null;
     const { delay = 0, dur = 0, ...opts } = o; let layer = o.layer || 'front'; delete opts.layer;
     if (layer === 'front' && G.lvl && G.lvl.cave) layer = 'top';
     for (const k in opts) if (opts[k] === undefined) delete opts[k];
@@ -31,17 +36,36 @@ const VFX = (() => {
     if (!e) { e = kept[key] = add(id, x, y, o); if (!e) { delete kept[key]; return; } }
     e.seen = tick; e.fx.options.x = Math.round(x); e.fx.options.y = Math.round(y);
   }
+  // um efeito que dá erro é só um enfeite: sai de cena e o jogo continua
+  function descarta(e, err) { e.ruim = true; e.layer = null; console.error('efeito descartado:', err); }
+  function afere(dt) {
+    media += (dt - media) * 0.02; desde++;
+    if (Q < 2 && desde > 150 && media > 0.026) {
+      Q++; desde = 0;
+      if (Q === 2) { for (const a of air) if (a) a.fx.stop(); air = []; }
+    }
+  }
   function update(dt) {
-    tick++;
+    tick++; afere(dt);
     for (const k in kept) if (kept[k].seen < tick - 2) { kept[k].fx.stop(); delete kept[k]; }
     for (const e of list) {
       if (e.delay > 0) { e.delay -= dt; continue; }
-      e.fx.update(dt); e.age += dt;
+      try { e.fx.update(dt); } catch (err) { descarta(e, err); continue; }
+      e.age += dt;
       if (e.dur && e.age > e.dur) e.fx.stop();
     }
-    list = list.filter(e => !e.fx.done());
+    list = list.filter(e => !e.ruim && !e.fx.done());
+  }
+  function mostra(S) {
+    if (!S.bw || !S.bh) return;
+    ctx.drawImage(S.c, S.x0, S.y0, S.bw, S.bh, S.cx + S.x0, S.y0 - DY, S.bw, S.bh);
+    if (S.lit) { ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(S.cl, S.x0, S.y0, S.bw, S.bh, S.cx + S.x0, S.y0 - DY, S.bw, S.bh); ctx.globalCompositeOperation = 'source-over'; }
   }
   function render(layer, cx) {
+    const S = camada(layer);
+    S.vez++;
+    // o ambiente muda devagar: basta recalcular em quadros alternados (e tudo, se a máquina estiver sofrendo)
+    if (S.pronta && S.vez % 2 && (Q > 0 || layer === 'air' || layer === 'back')) return mostra(S);
     let x0 = W, y0 = H, x1 = 0, y1 = 0, any = false;
     frame.ox = cx; frame.oy = -DY;
     for (const e of list) {
@@ -50,23 +74,21 @@ const VFX = (() => {
       const left = (o.flip ? o.x - (w - ox) : o.x - ox) - cx - 8, top = o.y - oy + DY - 8;
       if (left > W || left + w + 16 < 0 || top > H || top + h + 16 < 0) continue;
       if (!any) { frame.color.fill(0); frame.light.fill(0); any = true; }
-      e.fx.draw(frame);
+      try { e.fx.draw(frame); } catch (err) { descarta(e, err); continue; }
       x0 = Math.min(x0, left); y0 = Math.min(y0, top); x1 = Math.max(x1, left + w + 16); y1 = Math.max(y1, top + h + 16);
     }
+    S.pronta = true; S.bw = S.bh = 0; S.lit = false; S.cx = cx;
     if (!any) return;
     x0 = Math.max(0, x0 | 0); y0 = Math.max(0, y0 | 0); x1 = Math.min(W, Math.ceil(x1)); y1 = Math.min(H, Math.ceil(y1));
     const bw = x1 - x0, bh = y1 - y0;
-    if (bw > 0 && bh > 0) {
-      xC.putImageData(imgC, 0, 0, x0, y0, bw, bh);
-      ctx.drawImage(cC, x0, y0, bw, bh, cx + x0, y0 - DY, bw, bh);
-      // a luz soma com o que já está na tela (precisa de alfa cheio para somar tudo)
-      const Lb = frame.light; let lit = false;
-      for (let y = y0; y < y1; y++) for (let i = y * W + x0, e = i + bw; i < e; i++) if (Lb[i] & 0xffffff) { Lb[i] |= 0xff000000; lit = true; }
-      if (lit) {
-        xL.putImageData(imgL, 0, 0, x0, y0, bw, bh);
-        ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(cL, x0, y0, bw, bh, cx + x0, y0 - DY, bw, bh); ctx.globalCompositeOperation = 'source-over';
-      }
-    }
+    if (bw <= 0 || bh <= 0) return;
+    S.x0 = x0; S.y0 = y0; S.bw = bw; S.bh = bh;
+    S.x.putImageData(imgC, 0, 0, x0, y0, bw, bh);
+    // a luz soma com o que já está na tela (precisa de alfa cheio para somar tudo)
+    const Lb = frame.light;
+    for (let y = y0; y < y1; y++) for (let i = y * W + x0, e = i + bw; i < e; i++) if (Lb[i] & 0xffffff) { Lb[i] |= 0xff000000; S.lit = true; }
+    if (S.lit) S.xl.putImageData(imgL, 0, 0, x0, y0, bw, bh);
+    mostra(S);
   }
 
   // ---------- ambiente de cada bioma ----------
@@ -82,16 +104,14 @@ const VFX = (() => {
   };
   const DUST = { prologo: PAL.smoke, amazonia: PAL.earth, cerrado: PAL.ember, gruta: PAL.stone, pantanal: PAL.earth, caatinga: PAL.dust, mata: PAL.earth, coracao: PAL.cyber };
   function setLevel(L) {
-    list = []; kept = {}; props = []; air = [];
-    const A = AR[L.biome]; if (!A) return;
+    list = []; kept = {}; air = [];
+    for (const k in camadas) { camadas[k].pronta = false; camadas[k].bw = 0; }
+    const A = AR[L.biome]; if (!A || Q >= 2) return;
     air.push(add('terra/ar', 0, -DY, { kind: A.kind, palette: A.palette, bichos: A.bichos, seed: 7, layer: 'air' }));
-    const r = seeded((L.w | 0) + L.biome.length * 77);
-    if (L.biome === 'pantanal') for (const w of L.water) for (let x = w.x + 70; x < w.x + w.w - 50; x += 240 + r() * 120) props.push({ id: 'water/ripples', x, y: w.y + 3, seed: r() * 1e5 | 0, key: 'r' + props.length, palette: ['#2a1a4a', '#5a3a7a', '#8a6ab0', '#c8b0e0', '#e8d8f0', '#ffffff'] });
   }
   // o que depende da câmera e do estado da luta, a cada quadro
   function world(cx) {
     for (const a of air) if (a) { const o = a.fx.options; o.x = cx; o.camx = cx; }
-    for (const p of props) if (p.x > cx - 70 && p.x < cx + W + 70) keep(p.key, p.id, p.x, p.y, { layer: 'back', seed: p.seed, palette: p.palette, light: 0.6 });
     const B = G.boss;
     if (B && B.sunT > 0) keep('sol', 'holy/sunburst', cx + W / 2, 24, { layer: 'front', light: 0.7 });
   }
@@ -126,12 +146,12 @@ const VFX = (() => {
   }
   function bossDown(B) {
     play('impacts/crit-hit', B.x, B.y, { height: Math.max(14, B.h * 0.6), flip: B.f > 0 });
-    play('explosions/implosion', B.x, B.y - B.h * 0.5, { palette: PAL.ember });
     stop(0.16);
   }
   const hurt = P => { play('impacts/hit-spark', P.x + 5, P.y + P.h, { height: 16, palette: PAL.blood, flip: P.f > 0 }); stop(0.05); };
   const heal = P => { play('holy/heal-aoe', P.x + 5, P.y + P.h, { reach: 34, palette: PAL.gold, dur: 1.2 }); play('terra/memoria', P.x + 5, P.y + P.h, { count: 14, palette: ['#4a2c08', '#c48412', '#ffe066', '#fff6c4', '#ffffff'] }); };
   const dust = (x, y, dir, power) => play('terra/poeira', x, y, { dir, power, palette: DUST[G.lvl.biome] || PAL.dust });
+  const queda = (x, y) => play('terra/jato', x, y, { impacto: true, palette: G.lvl.biome === 'pantanal' ? ['#5a3a7a', '#8a6ab0', '#c8b0e0', '#e8d8f0', '#ffffff'] : undefined });
   const splash = (x, y) => play('water/splash', x, y, { stone: false, palette: G.lvl.biome === 'pantanal' ? ['#2a1a4a', '#5a3a7a', '#8a6ab0', '#c8b0e0', '#e8d8f0', '#ffffff'] : PAL.water });
   const memory = (x, y, count = 22) => play('terra/memoria', x, y, { count });
   function chest(c) {
@@ -145,5 +165,5 @@ const VFX = (() => {
   const rest = (x, y) => play('holy/heal-aoe', x, y, { reach: 70, palette: PAL.ember });
   const blink = B => { play('explosions/implosion', B.x, B.y - 34, { palette: PAL.shadow }); };
 
-  return { play, keep, update, render, setLevel, world, slash, hitE, kill, hitB, bossDown, hurt, heal, dust, splash, memory, chest, burst, form, death, respawn, rest, blink, PAL };
+  return { conta: () => list.length, qual: () => Q, play, keep, update, render, setLevel, world, slash, hitE, kill, hitB, bossDown, hurt, heal, dust, splash, queda, memory, chest, burst, form, death, respawn, rest, blink, PAL };
 })();
